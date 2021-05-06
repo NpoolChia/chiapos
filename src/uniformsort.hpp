@@ -27,9 +27,13 @@
 namespace UniformSort {
 
     inline int64_t const BUF_SIZE = 262144;
+    const uint8_t zero_pattern[8 * 1024 * 1024] = {0};
 
     inline static bool IsPositionEmpty(const uint8_t *memory, uint32_t const entry_len)
     {
+        if (entry_len < sizeof(zero_pattern) / sizeof(zero_pattern[0])) {
+            return 0 == memcmp(memory, zero_pattern, entry_len);
+        }
         for (uint32_t i = 0; i < entry_len; i++)
             if (memory[i] != 0)
                 return false;
