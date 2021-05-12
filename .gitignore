@@ -19,7 +19,13 @@ CMakeFiles
 Makefile
 **/*.rendered.*.cpp
 **/*.cppimporthash
-build
+build/*.so
+build/ProofOfSpace
+build/RunTests
+build/CMake*
+build/cmake*
+build/*.a
+build/_deps/*build
 .pytest_cache
 **/*.egg-info
 .mypy_cache
