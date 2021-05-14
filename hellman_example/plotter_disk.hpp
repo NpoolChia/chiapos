@@ -65,7 +65,7 @@ class DiskPlotter {
     // This method creates a plot on disk with the filename. A temporary file, "plotting" + filename,
     // is created and will be larger than the final plot file. This file is deleted at the end of
     // the process.
-    void CreatePlotDisk(std::string filename, uint8_t k, uint8_t* memo,
+    void CreatePlotDisk(std::string filename, uint8_t k, uint8_t w, uint8_t* memo,
                         uint32_t memo_len, uint8_t* id, uint32_t id_len) {
         std::cout << std::endl << "Starting plotting progress into file " << filename << "." << std::endl;
         std::cout << "Memo: " << Util::HexStr(memo, memo_len) << std::endl;

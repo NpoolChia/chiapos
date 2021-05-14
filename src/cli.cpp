@@ -69,6 +69,7 @@ int main(int argc, char *argv[]) try {
 
     // Default values
     uint8_t k = 20;
+    uint8_t w = 0;
     uint32_t num_buckets = 0;
     uint32_t num_stripes = 0;
     uint8_t num_threads = 0;
@@ -84,11 +85,12 @@ int main(int argc, char *argv[]) try {
     uint32_t buffmegabytes = 0;
 
     options.allow_unrecognised_options().add_options()(
-            "k, size", "Plot size", cxxopts::value<uint8_t>(k))(
-            "r, threads", "Number of threads", cxxopts::value<uint8_t>(num_threads))(
-                "u, buckets", "Number of buckets", cxxopts::value<uint32_t>(num_buckets))(
-            "s, stripes", "Size of stripes", cxxopts::value<uint32_t>(num_stripes))(
-            "t, tempdir", "Temporary directory", cxxopts::value<string>(tempdir))(
+        "k, size", "Plot size", cxxopts::value<uint8_t>(k))(
+        "w, where", "phase plot step", cxxopts::value<uint8_t>(w))(
+        "r, threads", "Number of threads", cxxopts::value<uint8_t>(num_threads))(
+        "u, buckets", "Number of buckets", cxxopts::value<uint32_t>(num_buckets))(
+        "s, stripes", "Size of stripes", cxxopts::value<uint32_t>(num_stripes))(
+        "t, tempdir", "Temporary directory", cxxopts::value<string>(tempdir))(
         "2, tempdir2", "Second Temporary directory", cxxopts::value<string>(tempdir2))(
         "d, finaldir", "Final directory", cxxopts::value<string>(finaldir))(
         "f, file", "Filename", cxxopts::value<string>(filename))(
@@ -139,6 +141,7 @@ int main(int argc, char *argv[]) try {
                 finaldir,
                 filename,
                 k,
+                w,
                 memo_bytes.data(),
                 memo_bytes.size(),
                 id_bytes.data(),

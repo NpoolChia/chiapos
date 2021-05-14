@@ -101,7 +101,7 @@ int main(int argc, char *argv[]) {
             HexToBytes(id, id_bytes);
 
             DiskPlotter plotter = DiskPlotter();
-            plotter.CreatePlotDisk(filename, k, memo_bytes, 5, id_bytes, 32);
+            plotter.CreatePlotDisk(filename, k, w, memo_bytes, 5, id_bytes, 32);
         } else if (operation == "prove") {
             if (argc < 3) {
                 HelpAndQuit(options);

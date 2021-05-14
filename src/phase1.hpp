@@ -53,6 +53,7 @@ struct THREADDATA {
     Sem::type* theirs;
     uint64_t right_entry_size_bytes;
     uint8_t k;
+    uint8_t w;
     uint8_t table_index;
     uint8_t metadata_size;
     uint32_t entry_size_bytes;

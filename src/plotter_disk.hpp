@@ -27,7 +27,6 @@
 #include <algorithm>
 #include <fstream>
 #include <iostream>
-#include <map>
 #include <string>
 #include <vector>
 #include <memory>
@@ -62,6 +61,7 @@ public:
         std::string final_dirname,
         std::string filename,
         uint8_t k,
+        uint8_t w,
         const uint8_t* memo,
         uint32_t memo_len,
         const uint8_t* id,
@@ -72,6 +72,87 @@ public:
         uint8_t num_threads_input = 0,
         bool nobitfield = false,
         bool show_progress = false)
+    {
+        std::ios_base::sync_with_stdio(false);
+        std::ostream* prevstr = std::cin.tie(NULL);
+
+        {
+            std::cout << std::endl
+                      << "Starting phase 1/4: Forward Propagation into tmp files... "
+                      << Timer::GetNow();
+
+            Timer all_phases;
+
+            if (w == 0) {
+                // run phase all in one
+                phase1(
+                    tmp_dirname,
+                    tmp2_dirname,
+                    final_dirname,
+                    filename,
+                    k,
+                    w,
+                    memo,
+                    memo_len,
+                    id,
+                    id_len,
+                    buf_megabytes_input,
+                    num_buckets_input,
+                    stripe_size_input,
+                    num_threads_input,
+                    nobitfield,
+                    show_progress
+                );
+                // run phase234
+                phase234();
+            } else if (w == 1) {
+                phase1(
+                    tmp_dirname,
+                    tmp2_dirname,
+                    final_dirname,
+                    filename,
+                    k,
+                    w,
+                    memo,
+                    memo_len,
+                    id,
+                    id_len,
+                    buf_megabytes_input,
+                    num_buckets_input,
+                    stripe_size_input,
+                    num_threads_input,
+                    nobitfield,
+                    show_progress
+                );
+                return;
+            } else {
+                // run phase234
+                phase234();
+            }
+            all_phases.PrintElapsed("Total time =");
+        }
+        std::cin.tie(prevstr);
+        std::ios_base::sync_with_stdio(true);
+    }
+
+    void phase1(
+        std::string tmp_dirname,
+        std::string tmp2_dirname,
+        std::string final_dirname,
+        std::string filename,
+        uint8_t k,
+        uint8_t w,
+        const uint8_t* memo,
+        uint32_t memo_len,
+        const uint8_t* id,
+        uint32_t id_len,
+        uint32_t buf_megabytes_input,
+        uint32_t num_buckets_input,
+        uint64_t stripe_size_input,
+        uint8_t num_threads_input,
+        bool nobitfield,
+        bool show_progress
+    )
     {
         // Increases the open file limit, we will open a lot of files.
 #ifndef _WIN32
@@ -197,170 +278,276 @@ public:
         fs::remove(tmp_2_filename);
         fs::remove(final_filename);
 
-        std::ios_base::sync_with_stdio(false);
-        std::ostream* prevstr = std::cin.tie(NULL);
+        // Scope for FileDisk
+        std::vector<FileDisk> tmp_1_disks;
+        for (auto const& fname : tmp_1_filenames)
+            tmp_1_disks.emplace_back(fname);
 
+        assert(id_len == kIdLen);
+        
+        Timer p1;
+        // only run phase1
+        std::vector<uint64_t> table_sizes = RunPhase1(
+            tmp_1_disks,
+            k,
+            id,
+            tmp_dirname,
+            filename,
+            memory_size,
+            num_buckets,
+            log_num_buckets,
+            stripe_size,
+            num_threads,
+            !nobitfield,
+            show_progress);
+        p1.PrintElapsed("Time for phase 1 =");
+        // save phase234 config
+        std::ofstream plotInfo(".plot1.ini");
+        // nobitfield
+        // std::cout << nobitfield<< std::endl;
+        plotInfo << nobitfield<< std::endl;
+        // show_progress
+        // std::cout << show_progress << std::endl;
+        plotInfo << show_progress << std::endl;
+        // id
+        // std::cout << static_cast<int>(*id)<< std::endl;
+        plotInfo << static_cast<int>(*id)<< std::endl;
+        // memo
+        // std::cout << static_cast<int>(*memo)<< std::endl;
+        plotInfo << static_cast<int>(*memo)<< std::endl;
+        // tmp_dirname
+        // std::cout << tmp_dirname << std::endl;
+        plotInfo << tmp_dirname << std::endl;
+        // filename
+        std::cout<< filename << std::endl;
+        plotInfo<< filename << std::endl;
+        // k
+        // std::cout << static_cast<int>(k)<< std::endl;
+        plotInfo << static_cast<int>(k)<< std::endl;
+        // num_buckets
+        // std::cout << num_buckets << std::endl;
+        plotInfo << num_buckets << std::endl;
+        // log_num_buckets
+        // std::cout << log_num_buckets << std::endl;
+        plotInfo << log_num_buckets << std::endl;
+        // memo_len 
+        // std::cout << memo_len<< std::endl;
+        plotInfo << memo_len<< std::endl;
+        // memory_size
+        // std::cout << memory_size<< std::endl;
+        plotInfo << memory_size<< std::endl;
+        // tmp_2_filename
+        // std::cout << tmp_2_filename.filename().generic_string() << std::endl;
+        plotInfo << tmp_2_filename.filename().generic_string() << std::endl;
+        // final_2_filename
+        // std::cout << final_2_filename.filename().generic_string() << std::endl;
+        plotInfo << final_2_filename.filename().generic_string() << std::endl;
+        // final_filename
+        // std::cout << final_filename.filename().generic_string() << std::endl;
+        plotInfo << final_filename.filename().generic_string() << std::endl;
+        // table_sizes size
+        // std::cout << table_sizes.size() << std::endl;
+        plotInfo << table_sizes.size() << std::endl;
+        // table_sizes
+        for (uint8_t it = 0; it < table_sizes.size(); it++)
         {
-            // Scope for FileDisk
-            std::vector<FileDisk> tmp_1_disks;
-            for (auto const& fname : tmp_1_filenames)
-                tmp_1_disks.emplace_back(fname);
+            uint64_t s = table_sizes[it];
+            // std::cout << s << std::endl;
+            plotInfo << s << std::endl;
+        }
+        // std::vector<fs::path> tmp_1_filenames;
+        // table_sizes size
+        // std::cout << tmp_1_filenames.size() << std::endl;
+        plotInfo << tmp_1_filenames.size() << std::endl;
+        // table_sizes
+        for (uint8_t it = 0; it < tmp_1_filenames.size(); it++)
+        {
+            fs::path _p = tmp_1_filenames[it];
+            // std::cout << _p.filename().generic_string() << std::endl;
+            plotInfo << _p.filename().generic_string() << std::endl;
+        }
+        plotInfo.close();
+    }
 
-            FileDisk tmp2_disk(tmp_2_filename);
+    void phase234()
+    {
+        // load phase1 config
+        std::ifstream plotInfo(".plot1.ini");
+        std::vector<std::string> lines;
+        std::string line;
+        while (getline (plotInfo, line)) {
+            lines.push_back(line);
+        }
+        plotInfo.close();
 
-            assert(id_len == kIdLen);
+        bool nobitfield = lines[0] == "1";
+        // std::cout << nobitfield << std::endl;
+        const bool show_progress = lines[1] == "1";
+        // std::cout << show_progress << std::endl;
+        const uint8_t id = std::stoul(lines[2]);
+        // std::cout << static_cast<int>(id) << std::endl;
+        const uint8_t memo = std::stoul(lines[3]);
+        // std::cout << static_cast<int>(memo) << std::endl;
+        const std::string &tmp_dirname = lines[4];
+        // std::cout << tmp_dirname << std::endl;
+        const std::string &filename = lines[5];
+        // std::cout << filename << std::endl;
+        uint8_t k = std::stoul(lines[6]);
+        // std::cout << static_cast<int>(k) << std::endl;
+        uint32_t num_buckets = std::stoul(lines[7]);
+        // std::cout << num_buckets << std::endl;
+        uint32_t log_num_buckets = std::stoul(lines[8]);
+        // std::cout << log_num_buckets << std::endl;
+        uint32_t memo_len = std::stoul(lines[9]);
+        // std::cout << memo_len << std::endl;
+        uint64_t memory_size = std::stoul(lines[10]);
+        // std::cout << memory_size << std::endl;
+        fs::path tmp_2_filename = lines[11];
+        // std::cout << tmp_2_filename << std::endl;
+        fs::path final_2_filename = lines[12];
+        // std::cout << final_2_filename << std::endl;
+        fs::path final_filename = lines[13];
+        // std::cout << final_filename << std::endl;
+        std::vector<uint64_t> table_sizes;
+        for (uint8_t i = 1; i <= std::stoul(lines[14]); i++){
+            table_sizes.push_back(std::stoul(lines[14+i]));
+            // std::cout << std::stoul(lines[14+i]) << std::endl;
+        }
+        std::vector<fs::path> tmp_1_filenames;
+        for (uint8_t i = 1; i <= std::stoul(lines[std::stoul(lines[14]) + 14 + 1]); i++){
+            tmp_1_filenames.push_back(lines[14+std::stoul(lines[14])+1+i]);
+            // std::cout << lines[14+std::stoul(lines[14])+1+i] << std::endl;
+        }
+
+        std::vector<FileDisk> tmp_1_disks;
+        for (auto const& fname : tmp_1_filenames)
+            tmp_1_disks.emplace_back(fname);
+
+        uint64_t finalsize=0;
+        FileDisk tmp2_disk(tmp_2_filename);
+
+        if(nobitfield)
+        {
+            // Memory to be used for sorting and buffers
+            std::unique_ptr<uint8_t[]> memory(new uint8_t[memory_size + 7]);
 
             std::cout << std::endl
-                      << "Starting phase 1/4: Forward Propagation into tmp files... "
-                      << Timer::GetNow();
+                << "Starting phase 2/4: Backpropagation without bitfield into tmp files... "
+                << Timer::GetNow();
 
-            Timer p1;
-            Timer all_phases;
-            std::vector<uint64_t> table_sizes = RunPhase1(
+            Timer p2;
+            std::vector<uint64_t> backprop_table_sizes = b17RunPhase2(
+                memory.get(),
                 tmp_1_disks,
+                table_sizes,
                 k,
-                id,
+                &id,
                 tmp_dirname,
                 filename,
                 memory_size,
                 num_buckets,
                 log_num_buckets,
-                stripe_size,
-                num_threads,
-                !nobitfield,
                 show_progress);
-            p1.PrintElapsed("Time for phase 1 =");
+            p2.PrintElapsed("Time for phase 2 =");
 
-            uint64_t finalsize=0;
+            // Now we open a new file, where the final contents of the plot will be stored.
+            uint32_t header_size = WriteHeader(tmp2_disk, k, &id, &memo, memo_len);
 
-            if(nobitfield)
-            {
-                // Memory to be used for sorting and buffers
-                std::unique_ptr<uint8_t[]> memory(new uint8_t[memory_size + 7]);
+            std::cout << std::endl
+                << "Starting phase 3/4: Compression without bitfield from tmp files into " << tmp_2_filename
+                << " ... " << Timer::GetNow();
+            Timer p3;
+            b17Phase3Results res = b17RunPhase3(
+                memory.get(),
+                k,
+                tmp2_disk,
+                tmp_1_disks,
+                backprop_table_sizes,
+                &id,
+                tmp_dirname,
+                filename,
+                header_size,
+                memory_size,
+                num_buckets,
+                log_num_buckets,
+                show_progress);
+            p3.PrintElapsed("Time for phase 3 =");
 
-                std::cout << std::endl
-                      << "Starting phase 2/4: Backpropagation without bitfield into tmp files... "
-                      << Timer::GetNow();
+            std::cout << std::endl
+                << "Starting phase 4/4: Write Checkpoint tables into " << tmp_2_filename
+                << " ... " << Timer::GetNow();
+            Timer p4;
+            b17RunPhase4(k, k + 1, tmp2_disk, res, show_progress, 16);
+            p4.PrintElapsed("Time for phase 4 =");
+            finalsize = res.final_table_begin_pointers[11];
+        } else {
+            std::cout << std::endl
+                << "Starting phase 2/4: Backpropagation into tmp files... "
+                << Timer::GetNow();
 
-                Timer p2;
-                std::vector<uint64_t> backprop_table_sizes = b17RunPhase2(
-                    memory.get(),
-                    tmp_1_disks,
-                    table_sizes,
-                    k,
-                    id,
-                    tmp_dirname,
-                    filename,
-                    memory_size,
-                    num_buckets,
-                    log_num_buckets,
-                    show_progress);
-                p2.PrintElapsed("Time for phase 2 =");
+            Timer p2;
+            Phase2Results res2 = RunPhase2(
+                tmp_1_disks,
+                table_sizes,
+                k,
+                &id,
+                tmp_dirname,
+                filename,
+                memory_size,
+                num_buckets,
+                log_num_buckets,
+                show_progress);
+            p2.PrintElapsed("Time for phase 2 =");
 
-                // Now we open a new file, where the final contents of the plot will be stored.
-                uint32_t header_size = WriteHeader(tmp2_disk, k, id, memo, memo_len);
+            // Now we open a new file, where the final contents of the plot will be stored.
+            uint32_t header_size = WriteHeader(tmp2_disk, k, &id, &memo, memo_len);
 
-                std::cout << std::endl
-                      << "Starting phase 3/4: Compression without bitfield from tmp files into " << tmp_2_filename
-                      << " ... " << Timer::GetNow();
-                Timer p3;
-                b17Phase3Results res = b17RunPhase3(
-                    memory.get(),
-                    k,
-                    tmp2_disk,
-                    tmp_1_disks,
-                    backprop_table_sizes,
-                    id,
-                    tmp_dirname,
-                    filename,
-                    header_size,
-                    memory_size,
-                    num_buckets,
-                    log_num_buckets,
-                    show_progress);
-                p3.PrintElapsed("Time for phase 3 =");
+            std::cout << std::endl
+                << "Starting phase 3/4: Compression from tmp files into " << tmp_2_filename
+                << " ... " << Timer::GetNow();
+            Timer p3;
+            Phase3Results res = RunPhase3(
+                k,
+                tmp2_disk,
+                std::move(res2),
+                &id,
+                tmp_dirname,
+                filename,
+                header_size,
+                memory_size,
+                num_buckets,
+                log_num_buckets,
+                show_progress);
+            p3.PrintElapsed("Time for phase 3 =");
 
-                std::cout << std::endl
-                      << "Starting phase 4/4: Write Checkpoint tables into " << tmp_2_filename
-                      << " ... " << Timer::GetNow();
-                Timer p4;
-                b17RunPhase4(k, k + 1, tmp2_disk, res, show_progress, 16);
-                p4.PrintElapsed("Time for phase 4 =");
-                finalsize = res.final_table_begin_pointers[11];
-            }
-            else {
-                std::cout << std::endl
-                      << "Starting phase 2/4: Backpropagation into tmp files... "
-                      << Timer::GetNow();
-
-                Timer p2;
-                Phase2Results res2 = RunPhase2(
-                    tmp_1_disks,
-                    table_sizes,
-                    k,
-                    id,
-                    tmp_dirname,
-                    filename,
-                    memory_size,
-                    num_buckets,
-                    log_num_buckets,
-                    show_progress);
-                p2.PrintElapsed("Time for phase 2 =");
-
-                // Now we open a new file, where the final contents of the plot will be stored.
-                uint32_t header_size = WriteHeader(tmp2_disk, k, id, memo, memo_len);
-
-                std::cout << std::endl
-                      << "Starting phase 3/4: Compression from tmp files into " << tmp_2_filename
-                      << " ... " << Timer::GetNow();
-                Timer p3;
-                Phase3Results res = RunPhase3(
-                    k,
-                    tmp2_disk,
-                    std::move(res2),
-                    id,
-                    tmp_dirname,
-                    filename,
-                    header_size,
-                    memory_size,
-                    num_buckets,
-                    log_num_buckets,
-                    show_progress);
-                p3.PrintElapsed("Time for phase 3 =");
-
-                std::cout << std::endl
-                      << "Starting phase 4/4: Write Checkpoint tables into " << tmp_2_filename
-                      << " ... " << Timer::GetNow();
-                Timer p4;
-                RunPhase4(k, k + 1, tmp2_disk, res, show_progress, 16);
-                p4.PrintElapsed("Time for phase 4 =");
-                finalsize = res.final_table_begin_pointers[11];
-            }
-
-            // The total number of bytes used for sort is saved to table_sizes[0]. All other
-            // elements in table_sizes represent the total number of entries written by the end of
-            // phase 1 (which should be the highest total working space time). Note that the max
-            // sort on disk space does not happen at the exact same time as max table sizes, so this
-            // estimate is conservative (high).
-            uint64_t total_working_space = table_sizes[0];
-            for (size_t i = 1; i <= 7; i++) {
-                total_working_space += table_sizes[i] * EntrySizes::GetMaxEntrySize(k, i, false);
-            }
-            std::cout << "Approximate working space used (without final file): "
-                      << static_cast<double>(total_working_space) / (1024 * 1024 * 1024) << " GiB"
-                      << std::endl;
-
-            std::cout << "Final File size: "
-                      << static_cast<double>(finalsize) /
-                             (1024 * 1024 * 1024)
-                      << " GiB" << std::endl;
-            all_phases.PrintElapsed("Total time =");
+            std::cout << std::endl
+                << "Starting phase 4/4: Write Checkpoint tables into " << tmp_2_filename
+                << " ... " << Timer::GetNow();
+            Timer p4;
+            RunPhase4(k, k + 1, tmp2_disk, res, show_progress, 16);
+            p4.PrintElapsed("Time for phase 4 =");
+            finalsize = res.final_table_begin_pointers[11];
         }
 
-        std::cin.tie(prevstr);
-        std::ios_base::sync_with_stdio(true);
+        // The total number of bytes used for sort is saved to table_sizes[0]. All other
+        // elements in table_sizes represent the total number of entries written by the end of
+        // phase 1 (which should be the highest total working space time). Note that the max
+        // sort on disk space does not happen at the exact same time as max table sizes, so this
+        // estimate is conservative (high).
+        uint64_t total_working_space = table_sizes[0];
+        for (size_t i = 1; i <= 7; i++) {
+            total_working_space += table_sizes[i] * EntrySizes::GetMaxEntrySize(k, i, false);
+        }
+        std::cout << "Approximate working space used (without final file): "
+                << static_cast<double>(total_working_space) / (1024 * 1024 * 1024) << " GiB"
+                << std::endl;
 
-        for (fs::path p : tmp_1_filenames) {
+        std::cout << "Final File size: "
+                << static_cast<double>(finalsize) /
+                        (1024 * 1024 * 1024)
+                << " GiB" << std::endl;
+
+         for (fs::path p : tmp_1_filenames) {
             fs::remove(p);
         }
 

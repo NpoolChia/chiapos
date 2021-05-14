@@ -537,6 +537,7 @@ void PlotAndTestProofOfSpace(
     std::string filename,
     uint32_t iterations,
     uint8_t k,
+    uint8_t w,
     uint8_t* plot_id,
     uint32_t buffer,
     uint32_t num_proofs,
@@ -546,7 +547,7 @@ void PlotAndTestProofOfSpace(
     DiskPlotter plotter = DiskPlotter();
     uint8_t memo[5] = {1, 2, 3, 4, 5};
     plotter.CreatePlotDisk(
-        ".", ".", ".", filename, k, memo, 5, plot_id, 32, buffer, 0, stripe_size, num_threads);
+        ".", ".", ".", filename, k, w, memo, 5, plot_id, 32, buffer, 0, stripe_size, num_threads);
     TestProofOfSpace(filename, iterations, k, plot_id, num_proofs);
     REQUIRE(remove(filename.c_str()) == 0);
 }
@@ -555,23 +556,23 @@ TEST_CASE("Plotting")
 {
     SECTION("Disk plot k18")
     {
-        PlotAndTestProofOfSpace("cpp-test-plot.dat", 100, 18, plot_id_1, 11, 95, 4000, 2);
+        PlotAndTestProofOfSpace("cpp-test-plot.dat", 100, 18, 0, plot_id_1, 11, 95, 4000, 2);
     }
     SECTION("Disk plot k19")
     {
-        PlotAndTestProofOfSpace("cpp-test-plot.dat", 100, 19, plot_id_1, 100, 71, 8192, 2);
+        PlotAndTestProofOfSpace("cpp-test-plot.dat", 100, 19, 0, plot_id_1, 100, 71, 8192, 2);
     }
     SECTION("Disk plot k19 single-thread")
     {
-        PlotAndTestProofOfSpace("cpp-test-plot.dat", 100, 19, plot_id_1, 100, 71, 8192, 1);
+        PlotAndTestProofOfSpace("cpp-test-plot.dat", 100, 19, 0, plot_id_1, 100, 71, 8192, 1);
     }
     SECTION("Disk plot k20")
     {
-        PlotAndTestProofOfSpace("cpp-test-plot.dat", 500, 20, plot_id_3, 100, 469, 16000, 2);
+        PlotAndTestProofOfSpace("cpp-test-plot.dat", 500, 20, 0, plot_id_3, 100, 469, 16000, 2);
     }
     SECTION("Disk plot k21")
     {
-        PlotAndTestProofOfSpace("cpp-test-plot.dat", 5000, 21, plot_id_3, 100, 4945, 8192, 4);
+        PlotAndTestProofOfSpace("cpp-test-plot.dat", 5000, 21, 0, plot_id_3, 100, 4945, 8192, 4);
     }
     // SECTION("Disk plot k24") { PlotAndTestProofOfSpace("cpp-test-plot.dat", 100, 24, plot_id_3,
     // 100, 107); }
@@ -586,7 +587,8 @@ TEST_CASE("Invalid plot")
             DiskPlotter plotter = DiskPlotter();
             uint8_t memo[5] = {1, 2, 3, 4, 5};
             uint8_t k = 20;
-            plotter.CreatePlotDisk(".", ".", ".", filename, k, memo, 5, plot_id_1, 32, 200, 32, 8192, 2);
+            uint8_t w = 0;
+            plotter.CreatePlotDisk(".", ".", ".", filename, k, w, memo, 5, plot_id_1, 32, 200, 32, 8192, 2);
             DiskProver prover(filename);
             uint8_t* proof_data = new uint8_t[8 * k];
             uint8_t challenge[32];

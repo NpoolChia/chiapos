@@ -53,7 +53,6 @@ struct Disk {
 #include <fcntl.h>
 #include <unistd.h>
 #include <mutex>
-#include <unordered_map>
 #include <cinttypes>
 
 enum class op_t : int { read, write};
@@ -114,7 +113,7 @@ struct FileDisk {
 #ifdef _WIN32
             f_ = ::_wfopen(filename_.c_str(), (flags & writeFlag) ? L"w+b" : L"r+b");
 #else
-            f_ = ::fopen(filename_.c_str(), (flags & writeFlag) ? "w+b" : "r+b");
+            f_ = ::fopen(filename_.c_str(), (flags & writeFlag) ? "a+b" : "r+b");
 #endif
             if (f_ == nullptr) {
                 std::string error_message =
