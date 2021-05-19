@@ -275,12 +275,12 @@ private:
         uint64_t const bucket_i = this->next_bucket_to_sort;
         bucket_t& b = buckets_[bucket_i];
         uint64_t const bucket_entries = b.write_pointer / entry_size_;
+        uint64_t const rs = Util::RoundSize(bucket_entries);
         uint64_t const entries_fit_in_memory = this->memory_size_ / entry_size_;
 
         double const have_ram = entry_size_ * entries_fit_in_memory / (1024.0 * 1024.0 * 1024.0);
         double const qs_ram = entry_size_ * bucket_entries / (1024.0 * 1024.0 * 1024.0);
-        double const u_ram =
-            Util::RoundSize(bucket_entries) * entry_size_ / (1024.0 * 1024.0 * 1024.0);
+        double const u_ram = rs * entry_size_ / (1024.0 * 1024.0 * 1024.0);
 
         if (bucket_entries > entries_fit_in_memory) {
             throw InsufficientMemoryException(
@@ -296,8 +296,7 @@ private:
 
         // Do SortInMemory algorithm if it fits in the memory
         // (number of entries required * entry_size_) <= total memory available
-        if (!force_quicksort &&
-            Util::RoundSize(bucket_entries) * entry_size_ <= memory_size_) {
+        if (!force_quicksort && rs * entry_size_ <= memory_size_) {
             std::cout << "\tBucket " << bucket_i << " uniform sort. Ram: " << std::fixed
                       << std::setprecision(3) << have_ram << "GiB, u_sort min: " << u_ram
                       << "GiB, qs min: " << qs_ram << "GiB." << std::endl;

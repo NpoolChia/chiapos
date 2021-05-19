@@ -42,6 +42,7 @@
 void RunPhase4(uint8_t k, uint8_t pos_size, FileDisk &tmp2_disk, Phase3Results &res,
                const bool show_progress, const int max_phase4_progress_updates)
 {
+    uint32_t const ba = Util::ByteAlign(k);
     uint32_t P7_park_size = Util::ByteAlign((k + 1) * kEntriesPerPark) / 8;
     uint64_t number_of_p7_parks =
         ((res.final_entries_written == 0 ? 0 : res.final_entries_written - 1) / kEntriesPerPark) +
@@ -50,9 +51,9 @@ void RunPhase4(uint8_t k, uint8_t pos_size, FileDisk &tmp2_disk, Phase3Results &
     uint64_t begin_byte_C1 = res.final_table_begin_pointers[7] + number_of_p7_parks * P7_park_size;
 
     uint64_t total_C1_entries = cdiv(res.final_entries_written, kCheckpoint1Interval);
-    uint64_t begin_byte_C2 = begin_byte_C1 + (total_C1_entries + 1) * (Util::ByteAlign(k) / 8);
+    uint64_t begin_byte_C2 = begin_byte_C1 + (total_C1_entries + 1) * (ba / 8);
     uint64_t total_C2_entries = cdiv(total_C1_entries, kCheckpoint2Interval);
-    uint64_t begin_byte_C3 = begin_byte_C2 + (total_C2_entries + 1) * (Util::ByteAlign(k) / 8);
+    uint64_t begin_byte_C3 = begin_byte_C2 + (total_C2_entries + 1) * (ba / 8);
 
     uint32_t size_C3 = EntrySizes::CalculateC3Size(k);
     uint64_t end_byte = begin_byte_C3 + (total_C1_entries)*size_C3;
@@ -74,7 +75,7 @@ void RunPhase4(uint8_t k, uint8_t pos_size, FileDisk &tmp2_disk, Phase3Results &
     uint32_t right_entry_size_bytes = res.right_entry_size_bits / 8;
 
     uint8_t *right_entry_buf;
-    auto C1_entry_buf = new uint8_t[Util::ByteAlign(k) / 8];
+    auto C1_entry_buf = new uint8_t[ba / 8];
     auto C3_entry_buf = new uint8_t[size_C3];
     auto P7_entry_buf = new uint8_t[P7_park_size];
 
@@ -106,8 +107,8 @@ void RunPhase4(uint8_t k, uint8_t pos_size, FileDisk &tmp2_disk, Phase3Results &
 
         if (f7_position % kCheckpoint1Interval == 0) {
             entry_y_bits.ToBytes(C1_entry_buf);
-            tmp2_disk.Write(final_file_writer_1, (C1_entry_buf), Util::ByteAlign(k) / 8);
-            final_file_writer_1 += Util::ByteAlign(k) / 8;
+            tmp2_disk.Write(final_file_writer_1, (C1_entry_buf), ba / 8);
+            final_file_writer_1 += ba / 8;
             if (num_C1_entries > 0) {
                 final_file_writer_2 = begin_byte_C3 + (num_C1_entries - 1) * size_C3;
                 size_t num_bytes =
@@ -159,20 +160,20 @@ void RunPhase4(uint8_t k, uint8_t pos_size, FileDisk &tmp2_disk, Phase3Results &
         Encoding::ANSFree(kC3R);
     }
 
-    Bits(0, Util::ByteAlign(k)).ToBytes(C1_entry_buf);
-    tmp2_disk.Write(final_file_writer_1, (C1_entry_buf), Util::ByteAlign(k) / 8);
-    final_file_writer_1 += Util::ByteAlign(k) / 8;
+    Bits(0, ba).ToBytes(C1_entry_buf);
+    tmp2_disk.Write(final_file_writer_1, (C1_entry_buf), ba / 8);
+    final_file_writer_1 += ba / 8;
     std::cout << "\tFinished writing C1 and C3 tables" << std::endl;
     std::cout << "\tWriting C2 table" << std::endl;
 
     for (Bits &C2_entry : C2) {
         C2_entry.ToBytes(C1_entry_buf);
-        tmp2_disk.Write(final_file_writer_1, (C1_entry_buf), Util::ByteAlign(k) / 8);
-        final_file_writer_1 += Util::ByteAlign(k) / 8;
+        tmp2_disk.Write(final_file_writer_1, (C1_entry_buf), ba / 8);
+        final_file_writer_1 += ba / 8;
     }
-    Bits(0, Util::ByteAlign(k)).ToBytes(C1_entry_buf);
-    tmp2_disk.Write(final_file_writer_1, (C1_entry_buf), Util::ByteAlign(k) / 8);
-    final_file_writer_1 += Util::ByteAlign(k) / 8;
+    Bits(0, ba).ToBytes(C1_entry_buf);
+    tmp2_disk.Write(final_file_writer_1, (C1_entry_buf), ba / 8);
+    final_file_writer_1 += ba / 8;
     std::cout << "\tFinished writing C2 table" << std::endl;
 
     delete[] C3_entry_buf;

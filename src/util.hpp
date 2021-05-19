@@ -23,6 +23,7 @@
 #include <iostream>
 #include <numeric>
 #include <queue>
+#include <unordered_map>
 #include <random>
 #include <sstream>
 #include <string>
@@ -141,14 +142,24 @@ private:
 };
 
 namespace Util {
-
+    static std::unordered_map<uint32_t, uint32_t> ba;
+    static std::unordered_map<uint128_t, uint8_t> sb;
+    static std::unordered_map<uint64_t, uint64_t> rd;
     template <typename X>
     inline X Mod(X i, X n)
     {
         return (i % n + n) % n;
     }
 
-    inline uint32_t ByteAlign(uint32_t num_bits) { return (num_bits + (8 - ((num_bits) % 8)) % 8); }
+    inline uint32_t ByteAlign(uint32_t num_bits) {
+        if(ba.count(num_bits) > 0)
+        {
+            return ba.find(num_bits)->second;
+        }
+        uint32_t _r = (num_bits + (8 - ((num_bits) % 8)) % 8);
+        ba[num_bits] = _r; 
+        return  _r;
+    }
 
     inline std::string HexStr(const uint8_t *data, size_t len)
     {
@@ -212,11 +223,16 @@ namespace Util {
      */
     inline uint8_t GetSizeBits(uint128_t value)
     {
+        if(sb.count(value) > 0)
+        {
+            return sb.find(value)->second;
+        }
         uint8_t count = 0;
         while (value) {
             count++;
             value >>= 1;
         }
+        sb[value] = count;
         return count;
     }
 
@@ -298,8 +314,14 @@ namespace Util {
     inline uint64_t RoundSize(uint64_t size)
     {
         size *= 2;
+        if(rd.count(size) > 0)
+        {
+            return rd.find(size)->second;
+        }
         uint64_t result = 1;
         while (result < size) result *= 2;
+        rd[size] = result + 50;
+
         return result + 50;
     }
 
