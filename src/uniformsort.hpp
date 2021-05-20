@@ -47,9 +47,10 @@ namespace UniformSort {
         uint8_t *const memory,
         uint32_t const entry_len,
         uint64_t const num_entries,
+        uint64_t const round_num_entries,
         uint32_t const bits_begin)
     {
-        uint64_t const memory_len = Util::RoundSize(num_entries) * entry_len;
+        uint64_t const memory_len = round_num_entries * entry_len;
         auto const swap_space = std::make_unique<uint8_t[]>(entry_len);
         auto const buffer = std::make_unique<uint8_t[]>(BUF_SIZE);
         uint64_t bucket_length = 0;

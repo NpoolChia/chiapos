@@ -123,7 +123,8 @@ public:
         this->last_size_ = 0;
         if (size > 64) {
             // Get number of extra 0s added at the beginning.
-            uint32_t zeros = size - Util::GetSizeBits(value);
+            uint8_t sb = Util::GetSizeBits(value);
+            uint32_t zeros = size - sb;
             // Add a full group of 0s (length 64)
             while (zeros > 64) {
                 AppendValue(0, 64);
@@ -131,7 +132,7 @@ public:
             }
             // Add the incomplete group of 0s and then the value.
             AppendValue(0, zeros);
-            AppendValue(value, Util::GetSizeBits(value));
+            AppendValue(value, sb);
         } else {
             /* 'value' must be under 'size' bits. */
             assert(size == 64 || value == (value & ((1ULL << size) - 1)));

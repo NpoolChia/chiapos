@@ -267,6 +267,7 @@ private:
                 memory_start,
                 this->entry_size,
                 bucket_entries,
+                rs,
                 this->begin_bits + this->log_num_buckets);
         } else {
             // Are we in Compress phrase 1 (quicksort=1) or is it the last bucket (quicksort=2)?
