@@ -306,6 +306,7 @@ private:
                 memory_start_.get(),
                 entry_size_,
                 bucket_entries,
+                rs,
                 begin_bits_ + log_num_buckets_);
         } else {
             // Are we in Compress phrase 1 (quicksort=1) or is it the last bucket (quicksort=2)?
