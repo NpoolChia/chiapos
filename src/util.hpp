@@ -152,10 +152,8 @@ namespace Util {
     inline uint32_t ByteAlign(uint32_t num_bits) {
         if(ba.count(num_bits) > 0)
         {
-            std::cout << "you are luck: -----" << num_bits << std::endl;
             return ba.find(num_bits)->second;
         }
-        std::cout << "you are luck: #####" << num_bits << std::endl;
         uint32_t _r = (num_bits + (8 - ((num_bits) % 8)) % 8);
         ba[num_bits] = _r;
         return  _r;
