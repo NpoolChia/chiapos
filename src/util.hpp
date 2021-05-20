@@ -142,22 +142,13 @@ private:
 };
 
 namespace Util {
-    static std::unordered_map<uint32_t, uint32_t> ba;
     template <typename X>
     inline X Mod(X i, X n)
     {
         return (i % n + n) % n;
     }
 
-    inline uint32_t ByteAlign(uint32_t num_bits) {
-        if(ba.count(num_bits) > 0)
-        {
-            return ba.find(num_bits)->second;
-        }
-        uint32_t _r = (num_bits + (8 - ((num_bits) % 8)) % 8);
-        ba[num_bits] = _r;
-        return  _r;
-    }
+    inline uint32_t ByteAlign(uint32_t num_bits) { return (num_bits + (8 - ((num_bits) % 8)) % 8); }
 
     inline std::string HexStr(const uint8_t *data, size_t len)
     {
