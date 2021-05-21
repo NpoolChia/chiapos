@@ -78,11 +78,14 @@ set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0")
 set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O0")
 ENDIF()
 
-# set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -g")
-# set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -g")
+set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
+set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall")
 
-set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -fno-stack-protector")
-set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -fno-stack-protector")
+set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-stack-protector -flto")
+set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-stack-protector -flto")
+
+# set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-semantic-interposition -ffast-math -ffp-contract=fast -funsafe-math-optimizations -funroll-all-loops -fsplit-loops -funswitch-loops")
+# set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-semantic-interposition -ffast-math -ffp-contract=fast -funsafe-math-optimizations -funroll-all-loops -fsplit-loops -funswitch-loops")
 
 ENDIF()
 
@@ -97,6 +100,8 @@ set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-omit-frame-pointer -fsanitize=thre
 set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-omit-frame-pointer -fsanitize=thread")
 set (CMAKE_LINKER_FLAGS "${CMAKE_LINKER_FLAGS} -fno-omit-frame-pointer -fsanitize=thread")
 ENDIF()
+
+set (CMAKE_LINKER_FLAGS "${CMAKE_LINKER_FLAGS} -static -lrt -pthread")
 
 IF (APPLE)
 # on macOS "uname -m" returns the architecture (x86_64 or arm64)
