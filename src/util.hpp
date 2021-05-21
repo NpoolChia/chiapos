@@ -21,15 +21,14 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
-#include <map>
 #include <numeric>
-#include <queue>
 #include <random>
-#include <set>
 #include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
+
+#define EXT_ENDIAN 1
 
 template <typename Int>
 constexpr inline Int cdiv(Int a, int b) { return (a + b - 1) / b; }
@@ -164,8 +163,18 @@ namespace Util {
 
     inline void IntToTwoBytes(uint8_t *result, const uint16_t input)
     {
-        uint16_t r = bswap_16(input);
-        memcpy(result, &r, sizeof(r));
+        #if EXT_ENDIAN
+            #if __BYTE_ORDER == __LITTLE_ENDIAN
+                result[0] = input >> 8;
+                result[1] = input & 0xff;
+            #else
+                result[0] = input & 0xff;
+                result[1] = input >> 8;
+            #endif
+        #else
+            uint16_t r = bswap_16(input);
+            memcpy(result, &r, sizeof(r));
+        #endif
     }
 
     // Used to encode deltas object size
@@ -177,9 +186,19 @@ namespace Util {
 
     inline uint16_t TwoBytesToInt(const uint8_t *bytes)
     {
-        uint16_t i;
-        memcpy(&i, bytes, sizeof(i));
-        return bswap_16(i);
+        #if EXT_ENDIAN
+            #if __BYTE_ORDER == __LITTLE_ENDIAN
+                return (uint16_t)bytes[0] | 
+                (uint16_t)bytes[1] << 8;
+            #else
+                return (uint16_t)bytes[0] << 8| 
+                (uint16_t)bytes[1];
+            #endif
+        #else
+            uint16_t i;
+            memcpy(&i, bytes, sizeof(i));
+            return bswap_16(i);
+        #endif
     }
 
     /*
@@ -187,8 +206,31 @@ namespace Util {
      */
     inline void IntToEightBytes(uint8_t *result, const uint64_t input)
     {
-        uint64_t r = bswap_64(input);
-        memcpy(result, &r, sizeof(r));
+        #if EXT_ENDIAN
+            #if __BYTE_ORDER == __LITTLE_ENDIAN
+                result[0] = (input & 0xff00000000000000ULL) >> 56;
+                result[1] = (input & 0xff000000000000ULL) >> 48;
+                result[2] = (input & 0xff0000000000ULL) >> 40;
+                result[3] = (input & 0xff00000000ULL) >> 32;
+                result[4] = (input & 0xff000000ULL) >> 24;
+                result[5] = (input & 0xff0000ULL) >> 16;
+                result[6] = (input & 0xff00ULL) >> 8;
+                result[7] = input & 0xffULL;
+            #else
+                // __BIG_ENDIAN
+                result[0] = input & 0xffULL;
+                result[1] = (input & 0xff00ULL) >> 8;
+                result[2] = (input & 0xff0000ULL) >> 16;
+                result[3] = (input & 0xff000000ULL) >> 24;
+                result[4] = (input & 0xff00000000ULL) >> 32;
+                result[5] = (input & 0xff0000000000ULL) >> 40;
+                result[6] = (input & 0xff000000000000ULL) >> 48;
+                result[7] = (input & 0xff00000000000000ULL) >> 56;
+            #endif
+        #else
+            uint64_t r = bswap_64(input);
+            memcpy(result, &r, sizeof(r));
+        #endif
     }
 
     /*
@@ -196,17 +238,83 @@ namespace Util {
      */
     inline uint64_t EightBytesToInt(const uint8_t *bytes)
     {
-        uint64_t i;
-        memcpy(&i, bytes, sizeof(i));
-        return bswap_64(i);
+        #if EXT_ENDIAN
+            #if __BYTE_ORDER == __LITTLE_ENDIAN
+                return
+                    (uint64_t)bytes[7] | 
+                    (uint64_t)bytes[6] << 8 |
+                    (uint64_t)bytes[5] << 16 |
+                    (uint64_t)bytes[4] << 24 |
+                    (uint64_t)bytes[3] << 32 |
+                    (uint64_t)bytes[2] << 40 |
+                    (uint64_t)bytes[1] << 48 |
+                    (uint64_t)bytes[0] << 56;
+            #else
+                return
+                    (uint64_t)bytes[0] | 
+                    (uint64_t)bytes[1] << 8 |
+                    (uint64_t)bytes[2] << 16 |
+                    (uint64_t)bytes[3] << 24 |
+                    (uint64_t)bytes[4] << 32 |
+                    (uint64_t)bytes[5] << 40 |
+                    (uint64_t)bytes[6] << 48 |
+                    (uint64_t)bytes[7] << 56;
+            #endif
+        #else
+            uint64_t i;
+            memcpy(&i, bytes, sizeof(i));
+            return bswap_64(i);
+        #endif
     }
 
     static void IntTo16Bytes(uint8_t *result, const uint128_t input)
     {
-        uint64_t r = bswap_64(input >> 64);
-        memcpy(result, &r, sizeof(r));
-        r = bswap_64((uint64_t)input);
-        memcpy(result + 8, &r, sizeof(r));
+        #if EXT_ENDIAN
+                uint64_t low64 = input >> 64;
+                uint64_t hi64 = (uint64_t)input;
+            #if __BYTE_ORDER == __LITTLE_ENDIAN
+                result[0] = (low64 & 0xff00000000000000ULL) >> 56;
+                result[1] = (low64 & 0xff000000000000ULL) >> 48;
+                result[2] = (low64 & 0xff0000000000ULL) >> 40;
+                result[3] = (low64 & 0xff00000000ULL) >> 32;
+                result[4] = (low64 & 0xff000000ULL) >> 24;
+                result[5] = (low64 & 0xff0000ULL) >> 16;
+                result[6] = (low64 & 0xff00ULL) >> 8;
+                result[7] = low64 & 0xffULL;
+
+                result[8] = (hi64 & 0xff00000000000000ULL) >> 56;
+                result[9] = (hi64 & 0xff000000000000ULL) >> 48;
+                result[10] = (hi64 & 0xff0000000000ULL) >> 40;
+                result[11] = (hi64 & 0xff00000000ULL) >> 32;
+                result[12] = (hi64 & 0xff000000ULL) >> 24;
+                result[13] = (hi64 & 0xff0000ULL) >> 16;
+                result[14] = (hi64 & 0xff00ULL) >> 8;
+                result[15] = hi64 & 0xffULL;
+            #else
+                result[0] = low64 & 0xffULL;
+                result[1] = (low64 & 0xff00ULL) >> 8;
+                result[2] = (low64 & 0xff0000ULL) >> 16;
+                result[3] = (low64 & 0xff000000ULL) >> 24;
+                result[4] = (low64 & 0xff00000000ULL) >> 32;
+                result[5] = (low64 & 0xff0000000000ULL) >> 40;
+                result[6] = (low64 & 0xff000000000000ULL) >> 48;
+                result[7] = (low64 & 0xff00000000000000ULL) >> 56;
+
+                result[8] = hi64 & 0xffULL;
+                result[9] = (hi64 & 0xff00ULL) >> 8;
+                result[10] = (hi64 & 0xff0000ULL) >> 16;
+                result[11] = (hi64 & 0xff000000ULL) >> 24;
+                result[12] = (hi64 & 0xff00000000ULL) >> 32;
+                result[13] = (hi64 & 0xff0000000000ULL) >> 40;
+                result[14] = (hi64 & 0xff000000000000ULL) >> 48;
+                result[15] = (hi64 & 0xff00000000000000ULL) >> 56;
+            #endif
+        #else
+            uint64_t r = bswap_64(input >> 64);
+            memcpy(result, &r, sizeof(r));
+            r = bswap_64((uint64_t)input);
+            memcpy(result + 8, &r, sizeof(r));
+        #endif
     }
 
     /*
@@ -320,11 +428,7 @@ namespace Util {
             return (left_arr[start_byte] & mask) - (right_arr[start_byte] & mask);
         }
 
-        for (uint32_t i = start_byte + 1; i < len; i++) {
-            if (left_arr[i] != right_arr[i])
-                return left_arr[i] - right_arr[i];
-        }
-        return 0;
+        return memcmp(&left_arr[start_byte + 1], &right_arr[start_byte + 1], len-1);
     }
 
     inline double RoundPow2(double a)
