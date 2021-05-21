@@ -28,8 +28,6 @@
 #include <utility>
 #include <vector>
 
-#define EXT_ENDIAN 1
-
 template <typename Int>
 constexpr inline Int cdiv(Int a, int b) { return (a + b - 1) / b; }
 
@@ -47,7 +45,7 @@ typedef __uint128_t uint128_t;
 std::ostream &operator<<(std::ostream &strm, uint128_t const &v)
 {
     strm << "uint128(" << (uint64_t)(v >> 64) << "," << (uint64_t)(v & (((uint128_t)1 << 64) - 1))
-         << ")";
+        << ")";
     return strm;
 }
 
@@ -81,62 +79,62 @@ inline uint64_t bswap_64(uint64_t x) { return __builtin_bswap64(x); }
 #endif
 
 class Timer {
-public:
-    Timer()
-    {
-        wall_clock_time_start_ = std::chrono::steady_clock::now();
+    public:
+        Timer()
+        {
+            wall_clock_time_start_ = std::chrono::steady_clock::now();
 #if _WIN32
-        ::GetProcessTimes(::GetCurrentProcess(), &ft_[3], &ft_[2], &ft_[1], &ft_[0]);
+            ::GetProcessTimes(::GetCurrentProcess(), &ft_[3], &ft_[2], &ft_[1], &ft_[0]);
 #else
-        cpu_time_start_ = clock();
+            cpu_time_start_ = clock();
 #endif
-    }
-
-    static char *GetNow()
-    {
-        auto now = std::chrono::system_clock::now();
-        auto tt = std::chrono::system_clock::to_time_t(now);
-        return ctime(&tt);  // ctime includes newline
-    }
-
-    void PrintElapsed(const std::string &name) const
-    {
-        auto end = std::chrono::steady_clock::now();
-        auto wall_clock_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                 end - this->wall_clock_time_start_)
-                                 .count();
-
-#if _WIN32
-        FILETIME nowft_[6];
-        nowft_[0] = ft_[0];
-        nowft_[1] = ft_[1];
-
-        ::GetProcessTimes(::GetCurrentProcess(), &nowft_[5], &nowft_[4], &nowft_[3], &nowft_[2]);
-        ULARGE_INTEGER u[4];
-        for (size_t i = 0; i < 4; ++i) {
-            u[i].LowPart = nowft_[i].dwLowDateTime;
-            u[i].HighPart = nowft_[i].dwHighDateTime;
         }
-        double user = (u[2].QuadPart - u[0].QuadPart) / 10000.0;
-        double kernel = (u[3].QuadPart - u[1].QuadPart) / 10000.0;
-        double cpu_time_ms = user + kernel;
+
+        static char *GetNow()
+        {
+            auto now = std::chrono::system_clock::now();
+            auto tt = std::chrono::system_clock::to_time_t(now);
+            return ctime(&tt);  // ctime includes newline
+        }
+
+        void PrintElapsed(const std::string &name) const
+        {
+            auto end = std::chrono::steady_clock::now();
+            auto wall_clock_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    end - this->wall_clock_time_start_)
+                .count();
+
+#if _WIN32
+            FILETIME nowft_[6];
+            nowft_[0] = ft_[0];
+            nowft_[1] = ft_[1];
+
+            ::GetProcessTimes(::GetCurrentProcess(), &nowft_[5], &nowft_[4], &nowft_[3], &nowft_[2]);
+            ULARGE_INTEGER u[4];
+            for (size_t i = 0; i < 4; ++i) {
+                u[i].LowPart = nowft_[i].dwLowDateTime;
+                u[i].HighPart = nowft_[i].dwHighDateTime;
+            }
+            double user = (u[2].QuadPart - u[0].QuadPart) / 10000.0;
+            double kernel = (u[3].QuadPart - u[1].QuadPart) / 10000.0;
+            double cpu_time_ms = user + kernel;
 #else
-        double cpu_time_ms =
-            1000.0 * (static_cast<double>(clock()) - this->cpu_time_start_) / CLOCKS_PER_SEC;
+            double cpu_time_ms =
+                1000.0 * (static_cast<double>(clock()) - this->cpu_time_start_) / CLOCKS_PER_SEC;
 #endif
 
-        double cpu_ratio = static_cast<int>(10000 * (cpu_time_ms / wall_clock_ms)) / 100.0;
+            double cpu_ratio = static_cast<int>(10000 * (cpu_time_ms / wall_clock_ms)) / 100.0;
 
-        std::cout << name << " " << (wall_clock_ms / 1000.0) << " seconds. CPU (" << cpu_ratio
-                  << "%) " << Timer::GetNow();
-    }
+            std::cout << name << " " << (wall_clock_ms / 1000.0) << " seconds. CPU (" << cpu_ratio
+                << "%) " << Timer::GetNow();
+        }
 
-private:
-    std::chrono::time_point<std::chrono::steady_clock> wall_clock_time_start_;
+    private:
+        std::chrono::time_point<std::chrono::steady_clock> wall_clock_time_start_;
 #if _WIN32
-    FILETIME ft_[4];
+        FILETIME ft_[4];
 #else
-    clock_t cpu_time_start_;
+        clock_t cpu_time_start_;
 #endif
 
 };
@@ -144,10 +142,10 @@ private:
 namespace Util {
 
     template <typename X>
-    inline X Mod(X i, X n)
-    {
-        return (i % n + n) % n;
-    }
+        inline X Mod(X i, X n)
+        {
+            return (i % n + n) % n;
+        }
 
     inline uint32_t ByteAlign(uint32_t num_bits) { return (num_bits + (8 - ((num_bits) % 8)) % 8); }
 
@@ -163,18 +161,8 @@ namespace Util {
 
     inline void IntToTwoBytes(uint8_t *result, const uint16_t input)
     {
-        #if EXT_ENDIAN
-            #if __BYTE_ORDER == __LITTLE_ENDIAN
-                result[0] = input >> 8;
-                result[1] = input & 0xff;
-            #else
-                result[0] = input & 0xff;
-                result[1] = input >> 8;
-            #endif
-        #else
-            uint16_t r = bswap_16(input);
-            memcpy(result, &r, sizeof(r));
-        #endif
+        uint16_t r = bswap_16(input);
+        memcpy(result, &r, sizeof(r));
     }
 
     // Used to encode deltas object size
@@ -186,19 +174,9 @@ namespace Util {
 
     inline uint16_t TwoBytesToInt(const uint8_t *bytes)
     {
-        #if EXT_ENDIAN
-            #if __BYTE_ORDER == __LITTLE_ENDIAN
-                return (uint16_t)bytes[0] | 
-                (uint16_t)bytes[1] << 8;
-            #else
-                return (uint16_t)bytes[0] << 8| 
-                (uint16_t)bytes[1];
-            #endif
-        #else
-            uint16_t i;
-            memcpy(&i, bytes, sizeof(i));
-            return bswap_16(i);
-        #endif
+        uint16_t i;
+        memcpy(&i, bytes, sizeof(i));
+        return bswap_16(i);
     }
 
     /*
@@ -206,31 +184,8 @@ namespace Util {
      */
     inline void IntToEightBytes(uint8_t *result, const uint64_t input)
     {
-        #if EXT_ENDIAN
-            #if __BYTE_ORDER == __LITTLE_ENDIAN
-                result[0] = (input & 0xff00000000000000ULL) >> 56;
-                result[1] = (input & 0xff000000000000ULL) >> 48;
-                result[2] = (input & 0xff0000000000ULL) >> 40;
-                result[3] = (input & 0xff00000000ULL) >> 32;
-                result[4] = (input & 0xff000000ULL) >> 24;
-                result[5] = (input & 0xff0000ULL) >> 16;
-                result[6] = (input & 0xff00ULL) >> 8;
-                result[7] = input & 0xffULL;
-            #else
-                // __BIG_ENDIAN
-                result[0] = input & 0xffULL;
-                result[1] = (input & 0xff00ULL) >> 8;
-                result[2] = (input & 0xff0000ULL) >> 16;
-                result[3] = (input & 0xff000000ULL) >> 24;
-                result[4] = (input & 0xff00000000ULL) >> 32;
-                result[5] = (input & 0xff0000000000ULL) >> 40;
-                result[6] = (input & 0xff000000000000ULL) >> 48;
-                result[7] = (input & 0xff00000000000000ULL) >> 56;
-            #endif
-        #else
-            uint64_t r = bswap_64(input);
-            memcpy(result, &r, sizeof(r));
-        #endif
+        uint64_t r = bswap_64(input);
+        memcpy(result, &r, sizeof(r));
     }
 
     /*
@@ -238,83 +193,17 @@ namespace Util {
      */
     inline uint64_t EightBytesToInt(const uint8_t *bytes)
     {
-        #if EXT_ENDIAN
-            #if __BYTE_ORDER == __LITTLE_ENDIAN
-                return
-                    (uint64_t)bytes[7] | 
-                    (uint64_t)bytes[6] << 8 |
-                    (uint64_t)bytes[5] << 16 |
-                    (uint64_t)bytes[4] << 24 |
-                    (uint64_t)bytes[3] << 32 |
-                    (uint64_t)bytes[2] << 40 |
-                    (uint64_t)bytes[1] << 48 |
-                    (uint64_t)bytes[0] << 56;
-            #else
-                return
-                    (uint64_t)bytes[0] | 
-                    (uint64_t)bytes[1] << 8 |
-                    (uint64_t)bytes[2] << 16 |
-                    (uint64_t)bytes[3] << 24 |
-                    (uint64_t)bytes[4] << 32 |
-                    (uint64_t)bytes[5] << 40 |
-                    (uint64_t)bytes[6] << 48 |
-                    (uint64_t)bytes[7] << 56;
-            #endif
-        #else
-            uint64_t i;
-            memcpy(&i, bytes, sizeof(i));
-            return bswap_64(i);
-        #endif
+        uint64_t i;
+        memcpy(&i, bytes, sizeof(i));
+        return bswap_64(i);
     }
 
     static void IntTo16Bytes(uint8_t *result, const uint128_t input)
     {
-        #if EXT_ENDIAN
-                uint64_t low64 = input >> 64;
-                uint64_t hi64 = (uint64_t)input;
-            #if __BYTE_ORDER == __LITTLE_ENDIAN
-                result[0] = (low64 & 0xff00000000000000ULL) >> 56;
-                result[1] = (low64 & 0xff000000000000ULL) >> 48;
-                result[2] = (low64 & 0xff0000000000ULL) >> 40;
-                result[3] = (low64 & 0xff00000000ULL) >> 32;
-                result[4] = (low64 & 0xff000000ULL) >> 24;
-                result[5] = (low64 & 0xff0000ULL) >> 16;
-                result[6] = (low64 & 0xff00ULL) >> 8;
-                result[7] = low64 & 0xffULL;
-
-                result[8] = (hi64 & 0xff00000000000000ULL) >> 56;
-                result[9] = (hi64 & 0xff000000000000ULL) >> 48;
-                result[10] = (hi64 & 0xff0000000000ULL) >> 40;
-                result[11] = (hi64 & 0xff00000000ULL) >> 32;
-                result[12] = (hi64 & 0xff000000ULL) >> 24;
-                result[13] = (hi64 & 0xff0000ULL) >> 16;
-                result[14] = (hi64 & 0xff00ULL) >> 8;
-                result[15] = hi64 & 0xffULL;
-            #else
-                result[0] = low64 & 0xffULL;
-                result[1] = (low64 & 0xff00ULL) >> 8;
-                result[2] = (low64 & 0xff0000ULL) >> 16;
-                result[3] = (low64 & 0xff000000ULL) >> 24;
-                result[4] = (low64 & 0xff00000000ULL) >> 32;
-                result[5] = (low64 & 0xff0000000000ULL) >> 40;
-                result[6] = (low64 & 0xff000000000000ULL) >> 48;
-                result[7] = (low64 & 0xff00000000000000ULL) >> 56;
-
-                result[8] = hi64 & 0xffULL;
-                result[9] = (hi64 & 0xff00ULL) >> 8;
-                result[10] = (hi64 & 0xff0000ULL) >> 16;
-                result[11] = (hi64 & 0xff000000ULL) >> 24;
-                result[12] = (hi64 & 0xff00000000ULL) >> 32;
-                result[13] = (hi64 & 0xff0000000000ULL) >> 40;
-                result[14] = (hi64 & 0xff000000000000ULL) >> 48;
-                result[15] = (hi64 & 0xff00000000000000ULL) >> 56;
-            #endif
-        #else
-            uint64_t r = bswap_64(input >> 64);
-            memcpy(result, &r, sizeof(r));
-            r = bswap_64((uint64_t)input);
-            memcpy(result + 8, &r, sizeof(r));
-        #endif
+        uint64_t r = bswap_64(input >> 64);
+        memcpy(result, &r, sizeof(r));
+        r = bswap_64((uint64_t)input);
+        memcpy(result + 8, &r, sizeof(r));
     }
 
     /*
@@ -338,9 +227,9 @@ namespace Util {
     // (regardless of 'num_bits'). In practice it can be ensured by allocating
     // extra 7 bytes to all memory buffers passed to this function.
     inline uint64_t SliceInt64FromBytes(
-        const uint8_t *bytes,
-        uint32_t start_bit,
-        const uint32_t num_bits)
+            const uint8_t *bytes,
+            uint32_t start_bit,
+            const uint32_t num_bits)
     {
         uint64_t tmp;
 
@@ -356,9 +245,9 @@ namespace Util {
     }
 
     inline uint64_t SliceInt64FromBytesFull(
-        const uint8_t *bytes,
-        uint32_t start_bit,
-        uint32_t num_bits)
+            const uint8_t *bytes,
+            uint32_t start_bit,
+            uint32_t num_bits)
     {
         uint32_t last_bit = start_bit + num_bits;
         uint64_t r = SliceInt64FromBytes(bytes, start_bit, num_bits);
@@ -368,9 +257,9 @@ namespace Util {
     }
 
     inline uint128_t SliceInt128FromBytes(
-        const uint8_t *bytes,
-        const uint32_t start_bit,
-        const uint32_t num_bits)
+            const uint8_t *bytes,
+            const uint32_t start_bit,
+            const uint32_t num_bits)
     {
         if (num_bits <= 64)
             return SliceInt64FromBytesFull(bytes, start_bit, num_bits);
@@ -392,10 +281,10 @@ namespace Util {
     }
 
     inline uint64_t ExtractNum(
-        const uint8_t *bytes,
-        uint32_t len_bytes,
-        uint32_t begin_bits,
-        uint32_t take_bits)
+            const uint8_t *bytes,
+            uint32_t len_bytes,
+            uint32_t begin_bits,
+            uint32_t take_bits)
     {
         if ((begin_bits + take_bits) / 8 > len_bytes - 1) {
             take_bits = len_bytes * 8 - begin_bits;
@@ -417,10 +306,10 @@ namespace Util {
      * Like memcmp, but only compares starting at a certain bit.
      */
     inline int MemCmpBits(
-        uint8_t *left_arr,
-        uint8_t *right_arr,
-        uint32_t len,
-        uint32_t bits_begin)
+            uint8_t *left_arr,
+            uint8_t *right_arr,
+            uint32_t len,
+            uint32_t bits_begin)
     {
         uint32_t start_byte = bits_begin / 8;
         uint8_t mask = ((1 << (8 - (bits_begin % 8))) - 1);
