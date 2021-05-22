@@ -370,13 +370,15 @@ void* phase1_thread(THREADDATA* ptd)
                         // Sets the R entry to used so that we don't drop in next iteration
                         R_entry.used = true;
                         // Computes the output pair (fx, new_metadata)
-                        if (metadata_size <= 128) {
+                        // if (metadata_size <= 128) {
+#if 1
                             const std::pair<Bits, Bits>& f_output = f.CalculateBucket(
                                 Bits(L_entry.y, k + kExtraBits),
                                 Bits(L_entry.left_metadata, metadata_size),
                                 Bits(R_entry.left_metadata, metadata_size));
                             future_entries_to_write.emplace_back(L_entry, R_entry, f_output);
-                        } else {
+                        // } else {
+#else
                             // Metadata does not fit into 128 bits
                             const std::pair<Bits, Bits>& f_output = f.CalculateBucket(
                                 Bits(L_entry.y, k + kExtraBits),
@@ -385,7 +387,8 @@ void* phase1_thread(THREADDATA* ptd)
                                 Bits(R_entry.left_metadata, 128) +
                                     Bits(R_entry.right_metadata, metadata_size - 128));
                             future_entries_to_write.emplace_back(L_entry, R_entry, f_output);
-                        }
+                        // }
+#endif
                     }
 
                     // At this point, future_entries_to_write contains the matches of buckets L
