@@ -313,7 +313,8 @@ private:
             //           << "GiB, qs min: " << qs_ram << "GiB." << std::endl;
             os << "    Bucket " << bucket_i << " uniform sort. Ram: " << std::fixed
                 << std::setprecision(3) << have_ram << "GiB, u_sort min: " << u_ram
-                << "GiB, qs min: " << qs_ram << "GiB. = ";
+                << "GiB, qs min: " << qs_ram << "GiB "
+                << " entries: " << bucket_entries << " entry: " << entry_size_ << " = ";
         } else {
             // Are we in Compress phrase 1 (quicksort=1) or is it the last bucket (quicksort=2)?
             // Perform quicksort if so (SortInMemory algorithm won't always perform well), or if we
@@ -327,7 +328,8 @@ private:
 
             os << "    Bucket " << bucket_i << " QS. Ram: " << std::fixed
                 << std::setprecision(3) << have_ram << "GiB, u_sort min: " << u_ram
-                << "GiB, qs min: " << qs_ram << "GiB. force_qs: " << force_quicksort << " = ";
+                << "GiB, qs min: " << qs_ram << "GiB. force_qs: " << force_quicksort
+                << " entries: " << bucket_entries << " entry: " << entry_size_ << " = ";
         }
 
         sort_start_timer.PrintElapsed(os.str());

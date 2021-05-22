@@ -53,7 +53,27 @@ namespace UniformSort {
         auto const buffer = std::make_unique<uint8_t[]>(BUF_SIZE);
         uint64_t bucket_length = 0;
         // The number of buckets needed (the smallest power of 2 greater than 2 * num_entries).
+
+#if 0
         while ((1ULL << bucket_length) < 2 * num_entries) bucket_length++;
+        std::cout << "Bucket length by shift " << bucket_length << " entries " << num_entries << std::endl;
+#else
+        uint64_t pow2_entries = 2 * num_entries - 1;
+        pow2_entries |= pow2_entries >> 1;
+        pow2_entries |= pow2_entries >> 2;
+        pow2_entries |= pow2_entries >> 4;
+        pow2_entries |= pow2_entries >> 8;
+        pow2_entries |= pow2_entries >> 16;
+        pow2_entries |= pow2_entries >> 32;
+        pow2_entries = pow2_entries + 1;
+
+        float fx = (float)pow2_entries;
+        unsigned long ix = *(unsigned long *)&fx;
+        unsigned long exp = (ix >> 23) & 0xff;
+
+        bucket_length = exp - 127;
+#endif
+
         memset(memory, 0, memory_len);
 
         uint64_t read_pos = input_disk_begin;

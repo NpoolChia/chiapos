@@ -216,7 +216,11 @@ void* phase1_thread(THREADDATA* ptd)
             Sem::Post(ptd->mine);
         }
 
+        Timer plot_entry_timer;
+        int loops = 0;
+
         while (pos < prevtableentries + 1) {
+            loops++;
             PlotEntry left_entry = PlotEntry();
             if (pos >= prevtableentries) {
                 end_of_table = true;
@@ -478,6 +482,10 @@ void* phase1_thread(THREADDATA* ptd)
             ++pos;
         }
 
+        std::ostringstream os;
+        os << "Phase1 loops " << loops;
+        // plot_entry_timer.PrintElapsed(os.str());
+
         // If we needed new bucket, we already waited
         // Do not wait if we are the first thread, since we are guaranteed that everything is written
         if (!need_new_bucket && !first_thread) {
@@ -563,8 +571,9 @@ void* F1thread(int const index, uint8_t const k, const uint8_t* id, std::mutex* 
 
             entry = (uint128_t)f1_entries[i] << (128 - kExtraBits - k);
             entry |= (uint128_t)x << (128 - kExtraBits - 2 * k);
-            Util::IntTo16Bytes(to_write, entry);
-            memcpy(&(right_writer_buf[i * entry_size_bytes]), to_write, 16);
+            // Util::IntTo16Bytes(to_write, entry);
+            // memcpy(&(right_writer_buf[i * entry_size_bytes]), to_write, 16);
+            Util::IntTo16Bytes(&(right_writer_buf[i * entry_size_bytes]), entry);
             right_writer_count++;
             x++;
         }
