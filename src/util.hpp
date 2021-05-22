@@ -126,7 +126,7 @@ class Timer {
             double cpu_ratio = static_cast<int>(10000 * (cpu_time_ms / wall_clock_ms)) / 100.0;
 
             std::cout << name << " " << (wall_clock_ms / 1000.0) << " seconds. CPU (" << cpu_ratio
-                << "%) " << Timer::GetNow();
+                << "%) " << Timer::GetNow() << std::endl;
         }
 
     private:
