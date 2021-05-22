@@ -57,6 +57,14 @@ include_directories(
 
 add_library(fse ${FSE_FILES})
 
+# set (CMAKE_C_COMPILER "/usr/bin/clang")
+# set (CMAKE_CXX_COMPILER "/usr/bin/clang++")
+# set (CMAKE_AR "/usr/bin/llvm-ar")
+# set (CMAKE_LINKER "/usr/bin/llvm-ld")
+# set (CMAKE_NM "/usr/bin/llvm-nm")
+# set (CMAKE_OBJDUMP "/usr/bin/llvm-objdump")
+# set (CMAKE_RANLIB "/usr/bin/llvm-ranlib")
+
 IF (MSVC)
 IF (CMAKE_BUILD_TYPE STREQUAL "RELEASE")
 set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /O2 /Oy")
@@ -71,8 +79,11 @@ set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /Zi")
 
 ELSE()
 IF (CMAKE_BUILD_TYPE STREQUAL "RELEASE")
-set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
-set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3")
+# set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O4 -DNDEBUG")
+# set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O4 -DNDEBUG")
+
+set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -DNDEBUG")
+set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3 -DNDEBUG")
 ELSE()
 set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0")
 set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O0")
