@@ -101,7 +101,7 @@ public:
                 if (cdiff != 1) {
                     return LargeBits();
                 } else {
-                    if(f.FindMatches(bucket_L, bucket_R, nullptr, nullptr) != 1) {
+                    if(f.MatchesCount(bucket_L, bucket_R) != 1) {
                         return LargeBits();
                     }
                 }

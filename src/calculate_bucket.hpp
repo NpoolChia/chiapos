@@ -308,12 +308,44 @@ public:
                 uint16_t r_target = L_targets[parity][r][i];
 
                 for (size_t j = 0; j < rmap[r_target].count; j++) {
-                    if(idx_L != nullptr) {
-                        idx_L[idx_count]=pos_L;
-                        idx_R[idx_count]=rmap[r_target].pos + j;
-                    }
+                    idx_L[idx_count]=pos_L;
+                    idx_R[idx_count]=rmap[r_target].pos + j;
                     idx_count++;
                 }
+            }
+        }
+        return idx_count;
+    }
+
+    inline int32_t MatchesCount(
+        const std::vector<PlotEntry>& bucket_L,
+        const std::vector<PlotEntry>& bucket_R)
+    {
+        int32_t idx_count = 0;
+        uint16_t parity = (bucket_L[0].y / kBC) % 2;
+
+        for (size_t yl : rmap_clean) {
+            this->rmap[yl].count = 0;
+        }
+        rmap_clean.clear();
+
+        uint64_t remove = (bucket_R[0].y / kBC) * kBC;
+        for (size_t pos_R = 0; pos_R < bucket_R.size(); pos_R++) {
+            uint64_t r_y = bucket_R[pos_R].y - remove;
+
+            if (!rmap[r_y].count) {
+                rmap[r_y].pos = pos_R;
+            }
+            rmap[r_y].count++;
+            rmap_clean.push_back(r_y);
+        }
+
+        uint64_t remove_y = remove - kBC;
+        for (size_t pos_L = 0; pos_L < bucket_L.size(); pos_L++) {
+            uint64_t r = bucket_L[pos_L].y - remove_y;
+            for (uint8_t i = 0; i < kExtraBitsPow; i++) {
+                uint16_t r_target = L_targets[parity][r][i];
+                idx_count += rmap[r_target].count;
             }
         }
         return idx_count;
@@ -325,5 +357,6 @@ private:
     std::vector<struct rmap_item> rmap;
     std::vector<uint16_t> rmap_clean;
 };
+
 
 #endif  // SRC_CPP_CALCULATE_BUCKET_HPP_

@@ -104,16 +104,19 @@ PlotEntry GetLeftEntry(
         left_entry.y = Util::SliceInt64FromBytes(left_buf, 0, ysize);
         left_entry.read_posoffset =
             Util::SliceInt64FromBytes(left_buf, ysize, pos_size + kOffsetSize);
-        if (metadata_size <= 128) {
+        // if (metadata_size <= 128) {
+#if 1
             left_entry.left_metadata =
                 Util::SliceInt128FromBytes(left_buf, ysize + pos_size + kOffsetSize, metadata_size);
-        } else {
+        // } else {
+#else
             // Large metadatas that don't fit into 128 bits. (k > 32).
             left_entry.left_metadata =
                 Util::SliceInt128FromBytes(left_buf, ysize + pos_size + kOffsetSize, 128);
             left_entry.right_metadata = Util::SliceInt128FromBytes(
                 left_buf, ysize + pos_size + kOffsetSize + 128, metadata_size - 128);
-        }
+#endif
+        // }
     }
     return left_entry;
 }
@@ -216,11 +219,7 @@ void* phase1_thread(THREADDATA* ptd)
             Sem::Post(ptd->mine);
         }
 
-        Timer plot_entry_timer;
-        int loops = 0;
-
         while (pos < prevtableentries + 1) {
-            loops++;
             PlotEntry left_entry = PlotEntry();
             if (pos >= prevtableentries) {
                 end_of_table = true;
@@ -481,10 +480,6 @@ void* phase1_thread(THREADDATA* ptd)
             // Increase the read pointer in the left table, by one
             ++pos;
         }
-
-        std::ostringstream os;
-        os << "Phase1 loops " << loops;
-        // plot_entry_timer.PrintElapsed(os.str());
 
         // If we needed new bucket, we already waited
         // Do not wait if we are the first thread, since we are guaranteed that everything is written
