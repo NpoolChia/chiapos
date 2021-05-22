@@ -54,6 +54,10 @@ namespace UniformSort {
         uint64_t bucket_length = 0;
         // The number of buckets needed (the smallest power of 2 greater than 2 * num_entries).
 
+        int loops = entry_len / sizeof(uint32_t);
+        int remains = entry_len % sizeof(uint32_t);
+        int offset = loops * sizeof(uint32_t);
+
 #if 0
         while ((1ULL << bucket_length) < 2 * num_entries) bucket_length++;
         std::cout << "Bucket length by shift " << bucket_length << " entries " << num_entries << std::endl;
@@ -99,9 +103,26 @@ namespace UniformSort {
                 // ...store there the minimum between the two and continue to push the higher one.
                 if (Util::MemCmpBits(
                         memory + pos, buffer.get() + buf_ptr, entry_len, bits_begin) > 0) {
+#if 0
                     memcpy(swap_space.get(), memory + pos, entry_len);
                     memcpy(memory + pos, buffer.get() + buf_ptr, entry_len);
                     memcpy(buffer.get() + buf_ptr, swap_space.get(), entry_len);
+#else
+                    for (int i = 0; i < loops; i++) {
+                        uint32_t src = *(uint32_t *)(memory + pos + i * sizeof(uint32_t));
+                        src ^= *(uint32_t *)(buffer.get() + buf_ptr + i * sizeof(uint32_t));
+                        *(uint32_t *)(buffer.get() + buf_ptr + i * sizeof(uint32_t)) ^= src;
+                        src ^= *(uint32_t *)(buffer.get() + buf_ptr + i * sizeof(uint32_t));
+                        *(uint32_t *)(memory + pos + i * sizeof(uint32_t)) = src;
+                    }
+                    for (int i = offset; i < remains; i++) {
+                        uint8_t src = *(uint8_t *)(memory + pos + i);
+                        src ^= *(uint8_t *)(buffer.get() + buf_ptr + i);
+                        *(uint8_t *)(buffer.get() + buf_ptr + i) ^= src;
+                        src ^= *(uint8_t *)(buffer.get() + buf_ptr + i);
+                        *(uint8_t *)(memory + pos + i) = src;
+                    }
+#endif
                     swaps++;
                 }
                 pos += entry_len;
