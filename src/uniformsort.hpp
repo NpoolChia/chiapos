@@ -123,12 +123,12 @@ namespace UniformSort {
                     memcpy(memory + pos, buffer.get() + buf_ptr, entry_len);
                     memcpy(buffer.get() + buf_ptr, swap_space.get(), entry_len);
 #else
-                    for (int i = 0; i < loops; i++) {
-                        uint32_t src = *(uint32_t *)(memory + pos + i * sizeof(uint32_t));
-                        src ^= *(uint32_t *)(buffer.get() + buf_ptr + i * sizeof(uint32_t));
-                        *(uint32_t *)(buffer.get() + buf_ptr + i * sizeof(uint32_t)) ^= src;
-                        src ^= *(uint32_t *)(buffer.get() + buf_ptr + i * sizeof(uint32_t));
-                        *(uint32_t *)(memory + pos + i * sizeof(uint32_t)) = src;
+                    for (uint32_t i = 0, l_offset = 0; i < loops; i++, l_offset += sizeof(uint32_t)) {
+                        uint32_t src = *(uint32_t *)(memory + pos + l_offset);
+                        src ^= *(uint32_t *)(buffer.get() + buf_ptr + l_offset);
+                        *(uint32_t *)(buffer.get() + buf_ptr + l_offset) ^= src;
+                        src ^= *(uint32_t *)(buffer.get() + buf_ptr + l_offset);
+                        *(uint32_t *)(memory + pos + l_offset) = src;
                     }
                     for (int i = offset; i < remains; i++) {
                         uint8_t src = *(uint8_t *)(memory + pos + i);
