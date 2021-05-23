@@ -31,12 +31,27 @@ namespace UniformSort {
 
     inline static bool IsPositionEmpty(const uint8_t *memory, uint32_t const entry_len)
     {
+#if 0
         if (entry_len < sizeof(zero_pattern) / sizeof(zero_pattern[0])) {
             return 0 == memcmp(memory, zero_pattern, entry_len);
         }
+
         for (uint32_t i = 0; i < entry_len; i++)
             if (memory[i] != 0)
                 return false;
+#else
+        uint32_t i = 0;
+        uint32_t j = 0;
+
+        for (i = sizeof(uint32_t), j = 0; i < entry_len; i += sizeof(uint32_t), j += sizeof(uint32_t))
+            if (*(uint32_t *)(&memory[j]) != 0)
+                return false;
+
+        for (; j < entry_len; j++)
+            if (memory[j] != 0)
+                return false;
+#endif
+
         return true;
     }
 

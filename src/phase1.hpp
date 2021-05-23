@@ -156,6 +156,12 @@ void* phase1_thread(THREADDATA* ptd)
     uint64_t totalstripes = (prevtableentries + globals.stripe_size - 1) / globals.stripe_size;
     uint64_t threadstripes = (totalstripes + globals.num_threads - 1) / globals.num_threads;
 
+    Timer phase1_thread_timer;
+    std::ostringstream os;
+    os << "Thread " << table_index << " threadstipes " << threadstripes << " totalstripes " << totalstripes;
+
+    phase1_thread_timer.PrintElapsed(os.str());
+
     for (uint64_t stripe = 0; stripe < threadstripes; stripe++) {
         uint64_t pos = (stripe * globals.num_threads + ptd->index) * globals.stripe_size;
         uint64_t const endpos = pos + globals.stripe_size + 1;  // one y value overlap
@@ -532,6 +538,8 @@ void* phase1_thread(THREADDATA* ptd)
         globals.matches += matches;
         Sem::Post(ptd->mine);
     }
+
+    phase1_thread_timer.PrintElapsed(os.str());
 
     return 0;
 }

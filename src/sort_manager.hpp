@@ -191,14 +191,17 @@ public:
             // position is the first position that we need in the new array
             uint64_t const cache_size = (this->final_position_end - position);
             prev_bucket_buf_.reset(new uint8_t[prev_bucket_buf_size]);
-            memset(prev_bucket_buf_.get(), 0x00, this->prev_bucket_buf_size);
+            memset(prev_bucket_buf_.get() + cache_size, 0x00, this->prev_bucket_buf_size - cache_size);
             memcpy(
                 prev_bucket_buf_.get(),
                 memory_start_.get() + position - this->final_position_start,
                 cache_size);
         }
 
+        Timer trigger_new_bucket_timer;
         SortBucket();
+        trigger_new_bucket_timer.PrintElapsed("Trigger new bucket = ");
+
         this->prev_bucket_position_start = position;
     }
 
