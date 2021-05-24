@@ -19,16 +19,34 @@
 #include <fstream>
 #include <iostream>
 #include <string>
-#include <list>
 #include <stdlib.h>
 
 #include "./disk.hpp"
 #include "./util.hpp"
 
+extern "C" {
+#include "./list.h"
+}
+
 namespace UniformSort {
 
     inline int64_t const BUF_SIZE = 262144;
     const uint8_t zero_pattern[8 * 1024 * 1024] = {0};
+
+    typedef struct {
+        struct list_head list;
+        uint8_t *entry;
+    } pos_entry_t;
+
+    int list_count(struct list_head *head)
+    {
+        int count = 0;
+        struct list_head *entry = nullptr;
+        list_for_each(entry, head) {
+            count++;
+        }
+        return count;
+    }
 
     inline static bool IsPositionEmpty(const uint8_t *memory, uint32_t const entry_len)
     {
@@ -64,9 +82,8 @@ namespace UniformSort {
         uint64_t const num_entries,
         uint32_t const bits_begin)
     {
-        uint64_t const memory_len = Util::RoundSize(num_entries) * entry_len;
-        auto const swap_space = std::make_unique<uint8_t[]>(entry_len);
         auto const buffer = std::make_unique<uint8_t[]>(BUF_SIZE);
+        uint64_t const memory_len = Util::RoundSize(num_entries) * entry_len;
         uint64_t bucket_length = 0;
         // The number of buckets needed (the smallest power of 2 greater than 2 * num_entries).
 
@@ -93,10 +110,13 @@ namespace UniformSort {
 
         uint8_t *my_memory = (uint8_t *)malloc(memory_len);
         memset(my_memory, 0x0, memory_len);
-        std::list<uint8_t *> **pos_entries = (std::list<uint8_t *> **)malloc(memory_len / entry_len * sizeof(std::list<uint8_t *> *));
-        memset(pos_entries, 0x0, memory_len / entry_len * sizeof(std::list<uint8_t *> *));
+        struct list_head *pos_entries = (struct list_head *)malloc(memory_len / entry_len * sizeof(struct list_head));
 
-        std::cout << "Extra memory " << memory_len << " meta memory " << memory_len / entry_len * sizeof(std::list<uint8_t *> *) << std::endl;
+        for (int i = 0; i < memory_len / entry_len; i++) {
+            INIT_LIST_HEAD(&pos_entries[i]);
+        }
+
+        std::cout << "Extra memory " << memory_len << " meta memory " << memory_len / entry_len * sizeof(struct list_head) << std::endl;
 
         uint64_t read_pos = input_disk_begin;
         uint64_t buf_size = 0;
@@ -123,27 +143,33 @@ namespace UniformSort {
             // Push the entry in the first free spot.
             memcpy(my_memory + memory_pos, buffer.get() + buf_ptr, entry_len);
 
-            std::list<uint8_t *> *entry_list = pos_entries[pos / entry_len];
-            if (entry_list == nullptr) {
-                entry_list = new std::list<uint8_t *>;
-                pos_entries[pos / entry_len] = entry_list;
-            }
-
+            struct list_head *entry_list = &pos_entries[pos / entry_len];
             bool inserted = false;
-            std::list<uint8_t *>::iterator it;
 
-            for (it = entry_list->begin(); it != entry_list->end(); ++it) {
+            pos_entry_t *next = nullptr;
+            pos_entry_t *entry = nullptr;
+
+            list_for_each_entry_safe(entry, next, entry_list, list) {
                 if (Util::MemCmpBits(
-                        my_memory + memory_pos, *it, entry_len, bits_begin) > 0) {
+                        my_memory + memory_pos, entry->entry, entry_len, bits_begin) > 0) {
                     continue;
                 }
                 inserted = true;
-                entry_list->insert(it, my_memory + memory_pos);
+
+                pos_entry_t *pos_entry = (pos_entry_t *)malloc(sizeof(pos_entry_t));
+                INIT_LIST_HEAD(&pos_entry->list);
+                pos_entry->entry = my_memory + memory_pos;
+
+                list_add_tail(&pos_entry->list, &entry->list);
                 break;
             }
 
             if (!inserted) {
-                entry_list->push_back(my_memory + memory_pos);
+                pos_entry_t *pos_entry = (pos_entry_t *)malloc(sizeof(pos_entry_t));
+                INIT_LIST_HEAD(&pos_entry->list);
+                pos_entry->entry = my_memory + memory_pos;
+
+                list_add_tail(&pos_entry->list, entry_list);
             }
 
             buf_ptr += entry_len;
@@ -153,44 +179,44 @@ namespace UniformSort {
         sort_to_memory_timer.PrintElapsed("Collect position map =");
 
         for (int i = 0; i < memory_len / entry_len; i++) {
-            std::list<uint8_t *> *entries = pos_entries[i];
+            struct list_head *entries = &pos_entries[i];
 
-            if (entries == nullptr) {
+            if (list_empty(entries)) {
                 continue;
             }
 
             for (int j = i + 1; j < memory_len / entry_len; j++) {
-                if (j < i + entries->size()) {
-                    std::list<uint8_t *> *rc_entries = pos_entries[j];
-                    if (rc_entries == nullptr) {
+                if (j < i + list_count(entries)) {
+                    struct list_head *rc_entries = &pos_entries[j];
+                    if (list_empty(rc_entries)) {
                         continue;
                     }
 
-                    std::list<uint8_t *>::iterator src_it;
-                    std::list<uint8_t *>::iterator dst_it;
                     bool loop_over = false;
+                    pos_entry_t *rc_next = nullptr;
+                    pos_entry_t *rc_entry = nullptr;
 
-                    for (src_it = rc_entries->begin(); src_it != rc_entries->end(); ++src_it) {
+                    list_for_each_entry_safe(rc_entry, rc_next, rc_entries, list) {
                         bool inserted = false;
+                        pos_entry_t *next = nullptr;
+                        pos_entry_t *entry = nullptr;
                         if (!loop_over) {
-                            for (dst_it = entries->begin(); dst_it != entries->end(); ++dst_it) {
+                            list_for_each_entry_safe(entry, next, entries, list) {
                                 if (Util::MemCmpBits(
-                                            *src_it, *dst_it, entry_len, bits_begin) > 0) {
+                                            rc_entry->entry, entry->entry, entry_len, bits_begin) > 0) {
                                     continue;
                                 }
                                 inserted = true;
-                                entries->insert(dst_it, *src_it);
+                                list_del(&entry->list);
+                                list_add_tail(&entry->list, &rc_entry->list);
                                 break;
                             }
                         }
                         if (!inserted) {
                             loop_over = true;
-                            entries->push_back(*src_it);
+                            list_add_tail(&entry->list, rc_entries);
                         }
                     }
-
-                    delete pos_entries[j];
-                    pos_entries[j] = nullptr;
 
                     continue;
                 }
@@ -205,30 +231,27 @@ namespace UniformSort {
         uint64_t entries_written = 0;
 
         for (int i = 0; i < memory_len / entry_len; i++) {
-            std::list<uint8_t *> *entries = pos_entries[i];
+            struct list_head *entries = &pos_entries[i];
 
-            if (entries == nullptr) {
+            if (list_empty(entries)) {
                 continue;
             }
 
-            std::list<uint8_t *>::iterator it;
-            for (it = entries->begin(); it != entries->end(); ++it) {
-                memcpy(memory + memory_pos, *it, entry_len);
+            pos_entry_t *next = nullptr;
+            pos_entry_t *entry = nullptr;
+
+            list_for_each_entry_safe(entry, next, entries, list) {
+                memcpy(memory + memory_pos, entry->entry, entry_len);
                 memory_pos += entry_len;
                 entries_written++;
+                list_del(&entry->list);
+                free(entry);
             }
         }
-
-        for (int i = 0; i < memory_len / entry_len; i++) {
-            if (pos_entries[i] == nullptr) {
-                continue;
-            }
-            delete pos_entries[i];
-        }
-
 
         sort_to_memory_timer.PrintElapsed("Copy position map =");
 
+        free(pos_entries);
         free(my_memory);
 
         sort_to_memory_timer.PrintElapsed("Free memory =");
