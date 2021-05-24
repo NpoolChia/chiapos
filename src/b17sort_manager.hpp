@@ -237,14 +237,14 @@ private:
         }
         uint64_t bucket_i = this->next_bucket_to_sort;
         uint64_t bucket_entries = bucket_write_pointers[bucket_i] / this->entry_size;
+        uint64_t round_bucket_entries = Util::RoundSize(bucket_entries);
         uint64_t entries_fit_in_memory = this->memory_size / this->entry_size;
 
         uint32_t entry_len_memory = this->entry_size - this->begin_bits / 8;
 
         double have_ram = entry_size * entries_fit_in_memory / (1024.0 * 1024.0 * 1024.0);
         double qs_ram = entry_size * bucket_entries / (1024.0 * 1024.0 * 1024.0);
-        double u_ram =
-            Util::RoundSize(bucket_entries) * entry_len_memory / (1024.0 * 1024.0 * 1024.0);
+        double u_ram = round_bucket_entries * entry_len_memory / (1024.0 * 1024.0 * 1024.0);
 
         if (bucket_entries > entries_fit_in_memory) {
             throw InsufficientMemoryException(
@@ -258,7 +258,7 @@ private:
         // Do SortInMemory algorithm if it fits in the memory
         // (number of entries required * entry_len_memory) <= total memory available
         if (!force_quicksort &&
-            Util::RoundSize(bucket_entries) * entry_len_memory <= this->memory_size) {
+            round_bucket_entries * entry_len_memory <= this->memory_size) {
             std::cout << "\tBucket " << bucket_i << " uniform sort. Ram: " << std::fixed
                       << std::setprecision(3) << have_ram << "GiB, u_sort min: " << u_ram
                       << "GiB, qs min: " << qs_ram << "GiB." << std::endl;
@@ -268,6 +268,7 @@ private:
                 memory_start,
                 this->entry_size,
                 bucket_entries,
+                round_bucket_entries,
                 this->begin_bits + this->log_num_buckets);
         } else {
             // Are we in Compress phrase 1 (quicksort=1) or is it the last bucket (quicksort=2)?

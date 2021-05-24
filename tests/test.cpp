@@ -774,7 +774,7 @@ TEST_CASE("Sort on disk")
 
         const uint32_t memory_len = Util::RoundSize(iters) * size;
         auto memory = std::make_unique<uint8_t[]>(memory_len);
-        UniformSort::SortToMemory(disk, begin, memory.get(), size, iters, 16);
+        UniformSort::SortToMemory(disk, begin, memory.get(), size, iters, Util::RoundSize(iters), 16);
 
         sort(input.begin(), input.end());
         uint8_t buf[size];
