@@ -304,7 +304,8 @@ private:
 
         if (!force_quicksort &&
             Util::RoundSize(bucket_entries) * entry_size_ <= memory_size_) {
-            UniformSort::SortToMemory(
+            // UniformSort::SortToMemory(
+            UniformSort::SortToMemoryV2(
                 b.underlying_file,
                 0,
                 memory_start_.get(),

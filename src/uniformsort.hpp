@@ -90,15 +90,17 @@ namespace UniformSort {
 
         bucket_length = exp - 127;
 
-        memset(memory, 0, memory_len);
+        // memset(memory, 0, memory_len);
         uint8_t *my_memory = (uint8_t *)malloc(memory_len);
         memset(my_memory, 0, memory_len);
-        std::map<uint64_t, std::vector<uint8_t *> *, std::greater<uint64_t>> pos_entry_map;
+        std::map<uint64_t, std::vector<uint8_t *> *, std::less<uint64_t>> pos_entry_map;
 
         uint64_t read_pos = input_disk_begin;
         uint64_t buf_size = 0;
         uint64_t buf_ptr = 0;
         uint64_t memory_pos = 0;
+
+        Timer sort_to_memory_timer;
 
         for (uint64_t i = 0; i < num_entries; i++) {
             if (buf_size == 0) {
@@ -144,19 +146,91 @@ namespace UniformSort {
             memory_pos += entry_len;
         }
 
+        sort_to_memory_timer.PrintElapsed("Collect position map =");
+
+        std::map<uint64_t, std::vector<uint64_t> *, std::less<uint64_t>> merge_pos_map;
+        std::map<uint64_t, uint64_t, std::less<uint64_t>> merge_pos_size;
+
         std::map<uint64_t, std::vector<uint8_t *> *>::iterator it;
         for (it = pos_entry_map.begin(); it != pos_entry_map.end(); ++it) {
-            // TODO: merge neighbour position and sort them
-            std::cout << "Pos: " << it->first << " size: " << it->second->size() << std::endl;
+            bool merged = false;
+            std::map<uint64_t, std::vector<uint64_t> *>::iterator pos_it;
+            for (pos_it = merge_pos_map.begin(); pos_it != merge_pos_map.end(); ++pos_it) {
+                std::map<uint64_t, uint64_t>::iterator pos_size_it = merge_pos_size.find(pos_it->first);
+                if (pos_it->first < it->first) {
+                    if (it->first < pos_it->first + pos_size_it->second) {
+                        std::cout << "Try merge: " << it->first << " at: " << pos_it->first << " size: " << pos_size_it->second << std::endl;
+                        pos_it->second->push_back(it->first);
+                        pos_size_it->second += it->second->size() * entry_len;
+                        merged = true;
+                    }
+                    break;
+                }
+            }
+
+            if (merged) {
+                continue;
+            }
+
+            if (merge_pos_map.end() == merge_pos_map.find(it->first)) {
+                merge_pos_map.insert(std::map<uint64_t, std::vector<uint64_t> *>::value_type(it->first, new std::vector<uint64_t>));
+                merge_pos_size.insert(std::map<uint64_t, uint64_t>::value_type(it->first, it->second->size() * entry_len));
+            }
         }
 
-        // TODO: copy map to last memory
+        sort_to_memory_timer.PrintElapsed("Merge position map =");
 
+        for (std::map<uint64_t, std::vector<uint64_t> *>::iterator it = merge_pos_map.begin(); it != merge_pos_map.end(); ++it) {
+            if (0 < it->second->size()) {
+                std::vector<uint8_t *> *entries = pos_entry_map.find(it->first)->second;
+                for (int i = 0; i < it->second->size(); i++) {
+                    std::vector<uint8_t *> *pos_entries = pos_entry_map.find((*it->second)[i])->second;
+                    for (int k = 0; k < pos_entries->size(); k++) {
+                        bool inserted = false;
+                        for (int j = 0; j < entries->size(); j++) {
+                            if (Util::MemCmpBits(
+                                        (*pos_entries)[k], (*entries)[j], entry_len, bits_begin) > 0) {
+                                continue;
+                            }
+                            inserted = true;
+                            entries->insert(entries->begin() + j, (*pos_entries)[k]);
+                            break;
+                        }
+                        if (!inserted) {
+                            entries->push_back((*pos_entries)[k]);
+                        }
+                    }
+                    pos_entry_map.erase((*it->second)[i]);
+                    delete pos_entries;
+                }
+            }
+        }
 
-        for (it = pos_entry_map.begin(); it != pos_entry_map.end(); ++it) {
+        sort_to_memory_timer.PrintElapsed("Sort merge position map =");
+
+        for (std::map<uint64_t, std::vector<uint64_t> *>::iterator it = merge_pos_map.begin(); it != merge_pos_map.end(); ++it) {
             delete it->second;
         }
+
+        sort_to_memory_timer.PrintElapsed("Delete position map =");
+
+        memory_pos = 0;
+        uint64_t entries_written = 0;
+
+        for (std::map<uint64_t, std::vector<uint8_t *> *>::iterator it = pos_entry_map.begin(); it != pos_entry_map.end(); ++it) {
+            for (int i = 0; i < it->second->size(); i++) {
+                memcpy(memory + memory_pos, (*it->second)[i], entry_len);
+                memory_pos += entry_len;
+                entries_written++;
+            }
+            delete it->second;
+        }
+
+        sort_to_memory_timer.PrintElapsed("Copy position map =");
+
         free(my_memory);
+
+        sort_to_memory_timer.PrintElapsed("Free memory =");
 
         assert(entries_written == num_entries);
     }
@@ -267,8 +341,6 @@ namespace UniformSort {
         }
 
         assert(entries_written == num_entries);
-
-        SortToMemoryV2(input_disk, input_disk_begin, memory, entry_len, num_entries, bits_begin);
     }
 
 }
