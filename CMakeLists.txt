@@ -89,8 +89,8 @@ set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0")
 set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O0")
 ENDIF()
 
-set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -fpermissive -g")
-set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -fpermissive -g")
+set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -fpermissive -g -O0")
+set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -fpermissive -g -O0")
 
 set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-stack-protector -flto")
 set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-stack-protector -flto")

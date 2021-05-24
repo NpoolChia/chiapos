@@ -207,14 +207,14 @@ namespace UniformSort {
                                     continue;
                                 }
                                 inserted = true;
-                                list_del(&entry->list);
-                                list_add_tail(&entry->list, &rc_entry->list);
+                                list_del(&rc_entry->list);
+                                list_add_tail(&rc_entry->list, &entry->list);
                                 break;
                             }
                         }
                         if (!inserted) {
                             loop_over = true;
-                            list_add_tail(&entry->list, rc_entries);
+                            list_add_tail(&rc_entry->list, entries);
                         }
                     }
 
