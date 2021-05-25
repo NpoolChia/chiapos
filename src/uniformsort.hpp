@@ -77,7 +77,6 @@ namespace UniformSort {
         uint64_t const num_entries,
         uint32_t const bits_begin)
     {
-        auto const buffer = std::make_unique<uint8_t[]>(BUF_SIZE);
         uint64_t const memory_len = Util::RoundSize(num_entries) * entry_len;
         uint64_t bucket_length = 0;
         // The number of buckets needed (the smallest power of 2 greater than 2 * num_entries).
@@ -119,29 +118,17 @@ namespace UniformSort {
         std::cout << "Extra memory " << memory_len << " meta memory " << memory_len / entry_len * sizeof(pos_entry_con_t) << std::endl;
 
         uint64_t read_pos = input_disk_begin;
-        uint64_t buf_size = 0;
         uint64_t buf_ptr = 0;
-        uint64_t memory_pos = 0;
 
         Timer sort_to_memory_timer;
+        input_disk.Read(read_pos, my_memory, num_entries * entry_len);
 
         for (uint64_t i = 0; i < num_entries; i++) {
-            if (buf_size == 0) {
-                // If read buffer is empty, read from disk and refill it.
-                buf_size = std::min((uint64_t)BUF_SIZE / entry_len, num_entries - i);
-                buf_ptr = 0;
-                input_disk.Read(read_pos, buffer.get(), buf_size * entry_len);
-                read_pos += buf_size * entry_len;
-            }
-            buf_size--;
             // First unique bits in the entry give the expected position of it in the sorted array.
             // We take 'bucket_length' bits starting with the first unique one.
             uint64_t pos =
-                Util::ExtractNum(buffer.get() + buf_ptr, entry_len, bits_begin, bucket_length) *
+                Util::ExtractNum(my_memory + buf_ptr, entry_len, bits_begin, bucket_length) *
                 entry_len;
-
-            // Push the entry in the first free spot.
-            memcpy(my_memory + memory_pos, buffer.get() + buf_ptr, entry_len);
 
             struct list_head *entry_list = &pos_entries[pos / entry_len].list;
             bool inserted = false;
@@ -151,7 +138,7 @@ namespace UniformSort {
 
             list_for_each_entry_safe(entry, next, entry_list, list) {
                 if (Util::MemCmpBits(
-                        my_memory + memory_pos, entry->entry, entry_len, bits_begin) > 0) {
+                        my_memory + buf_ptr, entry->entry, entry_len, bits_begin) > 0) {
                     continue;
                 }
                 inserted = true;
@@ -159,7 +146,7 @@ namespace UniformSort {
                 // pos_entry_t *pos_entry = (pos_entry_t *)malloc(sizeof(pos_entry_t));
                 pos_entry_t *pos_entry = &pos_entries_mem[pos_entries_index++];
                 INIT_LIST_HEAD(&pos_entry->list);
-                pos_entry->entry = my_memory + memory_pos;
+                pos_entry->entry = my_memory + buf_ptr;
 
                 list_add_tail(&pos_entry->list, &entry->list);
                 pos_entries[pos / entry_len].len += 1;
@@ -170,14 +157,13 @@ namespace UniformSort {
                 // pos_entry_t *pos_entry = (pos_entry_t *)malloc(sizeof(pos_entry_t));
                 pos_entry_t *pos_entry = &pos_entries_mem[pos_entries_index++];
                 INIT_LIST_HEAD(&pos_entry->list);
-                pos_entry->entry = my_memory + memory_pos;
+                pos_entry->entry = my_memory + buf_ptr;
 
                 list_add_tail(&pos_entry->list, entry_list);
                 pos_entries[pos / entry_len].len += 1;
             }
 
             buf_ptr += entry_len;
-            memory_pos += entry_len;
         }
 
         sort_to_memory_timer.PrintElapsed("Collect position map =");
@@ -239,7 +225,7 @@ namespace UniformSort {
 
         sort_to_memory_timer.PrintElapsed("Merge position map =");
 
-        memory_pos = 0;
+        uint64_t memory_pos = 0;
         uint64_t entries_written = 0;
 
         for (int i = 0; i < memory_len / entry_len; i++) {
