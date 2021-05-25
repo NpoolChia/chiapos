@@ -112,6 +112,10 @@ namespace UniformSort {
             pos_entries[i].len = 0;
         }
 
+        pos_entry_t *pos_entries_mem = (pos_entry_t *)malloc(memory_len / entry_len * sizeof(pos_entry_t));
+        memset(pos_entries_mem, 0x0, memory_len / entry_len * sizeof(pos_entry_t));
+        uint64_t pos_entries_index = 0;
+
         std::cout << "Extra memory " << memory_len << " meta memory " << memory_len / entry_len * sizeof(pos_entry_con_t) << std::endl;
 
         uint64_t read_pos = input_disk_begin;
@@ -152,7 +156,8 @@ namespace UniformSort {
                 }
                 inserted = true;
 
-                pos_entry_t *pos_entry = (pos_entry_t *)malloc(sizeof(pos_entry_t));
+                // pos_entry_t *pos_entry = (pos_entry_t *)malloc(sizeof(pos_entry_t));
+                pos_entry_t *pos_entry = &pos_entries_mem[pos_entries_index++];
                 INIT_LIST_HEAD(&pos_entry->list);
                 pos_entry->entry = my_memory + memory_pos;
 
@@ -162,7 +167,8 @@ namespace UniformSort {
             }
 
             if (!inserted) {
-                pos_entry_t *pos_entry = (pos_entry_t *)malloc(sizeof(pos_entry_t));
+                // pos_entry_t *pos_entry = (pos_entry_t *)malloc(sizeof(pos_entry_t));
+                pos_entry_t *pos_entry = &pos_entries_mem[pos_entries_index++];
                 INIT_LIST_HEAD(&pos_entry->list);
                 pos_entry->entry = my_memory + memory_pos;
 
@@ -251,12 +257,13 @@ namespace UniformSort {
                 memory_pos += entry_len;
                 entries_written++;
                 __list_del(entry->list.prev, entry->list.next);
-                free(entry);
+                // free(entry);
             }
         }
 
         sort_to_memory_timer.PrintElapsed("Copy position map =");
 
+        free(pos_entries_mem);
         free(pos_entries);
         free(my_memory);
 
