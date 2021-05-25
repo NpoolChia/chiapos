@@ -38,15 +38,10 @@ namespace UniformSort {
         uint8_t *entry;
     } pos_entry_t;
 
-    int list_count(struct list_head *head)
-    {
-        int count = 0;
-        struct list_head *entry = nullptr;
-        list_for_each(entry, head) {
-            count++;
-        }
-        return count;
-    }
+    typedef struct {
+        int len;
+        struct list_head list;
+    } pos_entry_con_t;
 
     inline static bool IsPositionEmpty(const uint8_t *memory, uint32_t const entry_len)
     {
@@ -110,13 +105,14 @@ namespace UniformSort {
 
         uint8_t *my_memory = (uint8_t *)malloc(memory_len);
         memset(my_memory, 0x0, memory_len);
-        struct list_head *pos_entries = (struct list_head *)malloc(memory_len / entry_len * sizeof(struct list_head));
+        pos_entry_con_t *pos_entries = (pos_entry_con_t *)malloc(memory_len / entry_len * sizeof(pos_entry_con_t));
 
         for (int i = 0; i < memory_len / entry_len; i++) {
-            INIT_LIST_HEAD(&pos_entries[i]);
+            INIT_LIST_HEAD(&pos_entries[i].list);
+            pos_entries[i].len = 0;
         }
 
-        std::cout << "Extra memory " << memory_len << " meta memory " << memory_len / entry_len * sizeof(struct list_head) << std::endl;
+        std::cout << "Extra memory " << memory_len << " meta memory " << memory_len / entry_len * sizeof(pos_entry_con_t) << std::endl;
 
         uint64_t read_pos = input_disk_begin;
         uint64_t buf_size = 0;
@@ -143,7 +139,7 @@ namespace UniformSort {
             // Push the entry in the first free spot.
             memcpy(my_memory + memory_pos, buffer.get() + buf_ptr, entry_len);
 
-            struct list_head *entry_list = &pos_entries[pos / entry_len];
+            struct list_head *entry_list = &pos_entries[pos / entry_len].list;
             bool inserted = false;
 
             pos_entry_t *next = nullptr;
@@ -161,6 +157,7 @@ namespace UniformSort {
                 pos_entry->entry = my_memory + memory_pos;
 
                 list_add_tail(&pos_entry->list, &entry->list);
+                pos_entries[pos / entry_len].len += 1;
                 break;
             }
 
@@ -170,6 +167,7 @@ namespace UniformSort {
                 pos_entry->entry = my_memory + memory_pos;
 
                 list_add_tail(&pos_entry->list, entry_list);
+                pos_entries[pos / entry_len].len += 1;
             }
 
             buf_ptr += entry_len;
@@ -179,15 +177,17 @@ namespace UniformSort {
         sort_to_memory_timer.PrintElapsed("Collect position map =");
 
         for (int i = 0; i < memory_len / entry_len; i++) {
-            struct list_head *entries = &pos_entries[i];
+            struct list_head *entries = &pos_entries[i].list;
 
             if (list_empty(entries)) {
                 continue;
             }
 
+            // std::cout << "Try merge pos " << i << " len " << pos_entries[i].len << std::endl;
             for (int j = i + 1; j < memory_len / entry_len; j++) {
-                if (j < i + list_count(entries)) {
-                    struct list_head *rc_entries = &pos_entries[j];
+                // std::cout << "Try merge pos " << j << " len " << pos_entries[j].len << " to " << i << " len " << pos_entries[i].len << std::endl;
+                if (j < i + pos_entries[i].len) {
+                    struct list_head *rc_entries = &pos_entries[j].list;
                     if (list_empty(rc_entries)) {
                         continue;
                     }
@@ -201,20 +201,26 @@ namespace UniformSort {
                         pos_entry_t *next = nullptr;
                         pos_entry_t *entry = nullptr;
                         if (!loop_over) {
+                            // std::cout << "Merging pos " << j << " len " << pos_entries[j].len << " to " << i << " len " << pos_entries[i].len << std::endl;
                             list_for_each_entry_safe(entry, next, entries, list) {
                                 if (Util::MemCmpBits(
                                             rc_entry->entry, entry->entry, entry_len, bits_begin) > 0) {
                                     continue;
                                 }
                                 inserted = true;
-                                list_del(&rc_entry->list);
+                                __list_del(rc_entry->list.prev, rc_entry->list.next);
+                                pos_entries[j].len -= 1;
                                 list_add_tail(&rc_entry->list, &entry->list);
+                                pos_entries[i].len += 1;
                                 break;
                             }
                         }
                         if (!inserted) {
                             loop_over = true;
+                            __list_del(rc_entry->list.prev, rc_entry->list.next);
                             list_add_tail(&rc_entry->list, entries);
+                            pos_entries[i].len += 1;
+                            pos_entries[j].len -= 1;
                         }
                     }
 
@@ -231,7 +237,7 @@ namespace UniformSort {
         uint64_t entries_written = 0;
 
         for (int i = 0; i < memory_len / entry_len; i++) {
-            struct list_head *entries = &pos_entries[i];
+            struct list_head *entries = &pos_entries[i].list;
 
             if (list_empty(entries)) {
                 continue;
@@ -244,7 +250,7 @@ namespace UniformSort {
                 memcpy(memory + memory_pos, entry->entry, entry_len);
                 memory_pos += entry_len;
                 entries_written++;
-                list_del(&entry->list);
+                __list_del(entry->list.prev, entry->list.next);
                 free(entry);
             }
         }
@@ -273,9 +279,9 @@ namespace UniformSort {
         uint64_t bucket_length = 0;
         // The number of buckets needed (the smallest power of 2 greater than 2 * num_entries).
 
-        int loops = entry_len / sizeof(uint32_t);
-        int remains = entry_len % sizeof(uint32_t);
-        int offset = loops * sizeof(uint32_t);
+        int loops = entry_len / sizeof(uint64_t);
+        int remains = entry_len % sizeof(uint64_t);
+        int offset = loops * sizeof(uint64_t);
 
 #if 0
         while ((1ULL << bucket_length) < 2 * num_entries) bucket_length++;
@@ -327,12 +333,12 @@ namespace UniformSort {
                     memcpy(memory + pos, buffer.get() + buf_ptr, entry_len);
                     memcpy(buffer.get() + buf_ptr, swap_space.get(), entry_len);
 #else
-                    for (uint32_t i = 0, l_offset = 0; i < loops; i++, l_offset += sizeof(uint32_t)) {
-                        uint32_t src = *(uint32_t *)(memory + pos + l_offset);
-                        src ^= *(uint32_t *)(buffer.get() + buf_ptr + l_offset);
-                        *(uint32_t *)(buffer.get() + buf_ptr + l_offset) ^= src;
-                        src ^= *(uint32_t *)(buffer.get() + buf_ptr + l_offset);
-                        *(uint32_t *)(memory + pos + l_offset) = src;
+                    for (uint32_t i = 0, l_offset = 0; i < loops; i++, l_offset += sizeof(uint64_t)) {
+                        uint64_t src = *(uint64_t *)(memory + pos + l_offset);
+                        src ^= *(uint64_t *)(buffer.get() + buf_ptr + l_offset);
+                        *(uint64_t *)(buffer.get() + buf_ptr + l_offset) ^= src;
+                        src ^= *(uint64_t *)(buffer.get() + buf_ptr + l_offset);
+                        *(uint64_t *)(memory + pos + l_offset) = src;
                     }
                     for (int i = offset; i < remains; i++) {
                         uint8_t src = *(uint8_t *)(memory + pos + i);
