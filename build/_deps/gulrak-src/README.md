@@ -5,7 +5,7 @@
 [![Build Status](https://api.cirrus-ci.com/github/gulrak/filesystem.svg?branch=master)](https://cirrus-ci.com/github/gulrak/filesystem)
 [![Build Status](https://cloud.drone.io/api/badges/gulrak/filesystem/status.svg?ref=refs/heads/master)](https://cloud.drone.io/gulrak/filesystem)
 [![Coverage Status](https://coveralls.io/repos/github/gulrak/filesystem/badge.svg?branch=master)](https://coveralls.io/github/gulrak/filesystem?branch=master)
-[![Latest Release Tag](https://img.shields.io/github/tag/gulrak/filesystem.svg)](https://github.com/gulrak/filesystem/tree/v1.5.4)
+[![Latest Release Tag](https://img.shields.io/github/tag/gulrak/filesystem.svg)](https://github.com/gulrak/filesystem/tree/v1.5.6)
 
 # Filesystem
 
@@ -15,9 +15,11 @@ based on the C++17 and C++20 specs, but implemented for C++11, C++14, C++17 or C
 macOS 10.12/10.14/10.15, Windows 10, Ubuntu 18.04, CentOS 7, CentOS 8, FreeBSD 12
 and Alpine ARM/ARM64 Linux but should work on other systems too, as long as you have
 at least a C++11 compatible compiler. It should work with Android NDK, Emscripten and I even
-had reports of it being used on iOS (within sandboxing constraints).
-It is of course in its own namespace `ghc::filesystem` to not interfere with a regular `std::filesystem` should you use it in a mixed C++17
-environment (which is possible).
+had reports of it being used on iOS (within sandboxing constraints) and with v1.5.6 there
+is experimental support for QNX. The support of Android NDK, Emscripten and QNX is not
+backed up by automated testing but PRs and bug reports are welcome for those too.
+It is of course in its own namespace `ghc::filesystem` to not interfere with a regular `std::filesystem`
+should you use it in a mixed C++17 environment (which is possible).
 
 *Test coverage is well above 90%, and starting with v1.3.6 and in v1.5.0
 more time was invested in benchmarking and optimizing parts of the library. I'll try
@@ -75,7 +77,7 @@ for more information._
 
 Unit tests are currently run with:
 
-* macOS 10.12: Xcode 9.2 (clang-900.0.39.2), GCC 9.2, Clang 9.0, macOS 10.13: Xcode 10.1, macOS 10.14: Xcode 11.2, macOS 10.15: Xcode 11.6
+* macOS 10.12: Xcode 9.2 (clang-900.0.39.2), GCC 9.2, Clang 9.0, macOS 10.13: Xcode 10.1, macOS 10.14: Xcode 11.2, macOS 10.15: Xcode 11.6, Xcode 12.4
 * Windows: Visual Studio 2017, Visual Studio 2015, Visual Studio 2019, MinGW GCC 6.3 (Win32), GCC 7.2 (Win64), Cygwin GCC 10.2 (no CI yet)
 * Linux (Ubuntu): GCC (5.5, 6.5, 7.4, 8.3, 9.2), Clang (5.0, 6.0, 7.1, 8.0, 9.0)
 * Linux (Alpine ARM/ARM64): GCC 9.2.0
@@ -119,8 +121,8 @@ in the standard, and there might be issues in these implementations too.
 
 ### Downloads
 
-The latest release version is [v1.5.4](https://github.com/gulrak/filesystem/tree/v1.5.4) and
-source archives can be found [here](https://github.com/gulrak/filesystem/releases/tag/v1.5.4).
+The latest release version is [v1.5.6](https://github.com/gulrak/filesystem/tree/v1.5.6) and
+source archives can be found [here](https://github.com/gulrak/filesystem/releases/tag/v1.5.6).
 
 The latest pre-native-backend version is [v1.4.0](https://github.com/gulrak/filesystem/tree/v1.4.0) and
 source archives can be found [here](https://github.com/gulrak/filesystem/releases/tag/v1.4.0).
@@ -141,6 +143,9 @@ Everything is in the namespace `ghc::filesystem`, so one way to use it only as
 a fallback could be:
 
 ```cpp
+#ifdef __APPLE__
+#include <Availability.h> // for deployment target to support pre-catalina targets without std::fs 
+#endif
 #if ((defined(_MSVC_LANG) && _MSVC_LANG >= 201703L) || (defined(__cplusplus) && __cplusplus >= 201703L)) && defined(__has_include)
 #if __has_include(<filesystem>) && (!defined(__MAC_OS_X_VERSION_MIN_REQUIRED) || __MAC_OS_X_VERSION_MIN_REQUIRED >= 101500)
 #define GHC_USE_STD_FS
@@ -169,6 +174,9 @@ If you want to also use the `fstream` wrapper with `path` support as fallback,
 you might use:
 
 ```cpp
+#ifdef __APPLE__
+#include <Availability.h> // for deployment target to support pre-catalina targets without std::fs 
+#endif
 #if ((defined(_MSVC_LANG) && _MSVC_LANG >= 201703L) || (defined(__cplusplus) && __cplusplus >= 201703L)) && defined(__has_include)
 #if __has_include(<filesystem>) && (!defined(__MAC_OS_X_VERSION_MIN_REQUIRED) || __MAC_OS_X_VERSION_MIN_REQUIRED >= 101500)
 #define GHC_USE_STD_FS
@@ -195,9 +203,14 @@ using fstream = ghc::filesystem::fstream;
 Now you have e.g. `fs::ofstream out(somePath);` and it is either the wrapper or
 the C++17 `std::ofstream`.
 
-**Be aware, as a header-only library, it is not hiding the fact, that it
+:information_source: **Be aware, as a header-only library, it is not hiding the fact, that it
 uses system includes, so they "pollute" your global namespace. Use the
-forwarding-/implementation-header based approach (see below) to avoid this.**
+forwarding-/implementation-header based approach (see below) to avoid this.
+For Windows it needs `Windows.h` and it might be a good idea to define
+`WIN32_LEAN_AND_MEAN` or `NOMINMAX` prior to including `filesystem.hpp` or
+`fs_std.hpp` headers  to reduce pollution of your global namespace and compile
+time. They are not defined by `ghc::filesystem` to allow combination with contexts
+where the full `Windows.h`is needed, e.g. for UI elements.**
 
 :information_source: **Hint:** There is an additional header named `ghc/fs_std.hpp` that implements this
 dynamic selection of a filesystem implementation, that you can include
@@ -211,8 +224,8 @@ Alternatively, starting from v1.1.0 `ghc::filesystem` can also be used by
 including one of two additional wrapper headers. These allow to include
 a forwarded version in most places (`ghc/fs_fwd.hpp`) while hiding the
 implementation details in a single cpp file that includes `ghc/fs_impl.hpp` to
-implement the needed code. That way system includes are only visible from
-inside the cpp file, all other places are clean.
+implement the needed code. Using `ghc::filesystem` this way makes sure
+system includes are only visible from inside the cpp file, all other places are clean.
 
 Be aware, that it is currently not supported to hide the implementation
 into a Windows-DLL, as a DLL interface with C++ standard templates in interfaces
@@ -223,6 +236,9 @@ If you use the forwarding/implementation approach, you can still use the dynamic
 switching like this:
 
 ```cpp
+#ifdef __APPLE__
+#include <Availability.h> // for deployment target to support pre-catalina targets without std::fs
+#endif
 #if ((defined(_MSVC_LANG) && _MSVC_LANG >= 201703L) || (defined(__cplusplus) && __cplusplus >= 201703L)) && defined(__has_include)
 #if __has_include(<filesystem>) && (!defined(__MAC_OS_X_VERSION_MIN_REQUIRED) || __MAC_OS_X_VERSION_MIN_REQUIRED >= 101500)
 #define GHC_USE_STD_FS
@@ -250,6 +266,9 @@ and in the implementation hiding cpp, you might use (before any include that inc
 to take precedence:
 
 ```cpp
+#ifdef __APPLE__ // for deployment target to support pre-catalina targets without std::fs 
+#include <Availability.h>
+#endif
 #if ((defined(_MSVC_LANG) && _MSVC_LANG >= 201703L) || (defined(__cplusplus) && __cplusplus >= 201703L)) && defined(__has_include)
 #if __has_include(<filesystem>) && (!defined(__MAC_OS_X_VERSION_MIN_REQUIRED) || __MAC_OS_X_VERSION_MIN_REQUIRED >= 101500)
 #define GHC_USE_STD_FS
@@ -522,7 +541,7 @@ the standard.
 As symbolic links on Windows, while being supported more or less since
 Windows Vista (with some strict security constraints) and fully since some earlier
 build of Windows 10, when "Developer Mode" is activated, are at time of writing
-(2018) rarely used, still they are supported with this implementation.
+(2018) rarely used, still they are supported wiit th this implementation.
 
 #### Permissions
 
@@ -537,9 +556,41 @@ to the expected behavior.
 
 ## Release Notes
 
+### [v1.5.6](https://github.com/gulrak/filesystem/releases/tag/v1.5.6)
+
+* Fix for [#124](https://github.com/gulrak/filesystem/issues/124),
+  `ghc::filesystem` treated mounted folder/volumes erroneously as symlinks,
+  leading `fs::canonical` to fail on paths containing those.
+* Fix for [#122](https://github.com/gulrak/filesystem/issues/122), incrementing
+  the `recursive_directory_iterator` will not try to enter dead symlinks.
+* Fix for [#121](https://github.com/gulrak/filesystem/issues/121), on Windows
+  backend the `fs::remove` failed when the path pointed to a read-only entry,
+  see also ([microsoft/STL#1511](https://github.com/microsoft/STL/issues/1511))
+  for the corresponding issue in `std::fs` on windows.
+* Fix for [#119](https://github.com/gulrak/filesystem/issues/119), added missing
+  support for char16_t and char32_t and on C++20 char8_t literals.
+* Pull request [#118](https://github.com/gulrak/filesystem/pull/118), when
+  running tests as root, disable tests that would not work.
+* Pull request [#117](https://github.com/gulrak/filesystem/pull/117), added
+  checks to tests to detect the clang/libstdc++ combination.
+* Fix for [#116](https://github.com/gulrak/filesystem/issues/116), internal
+  macro `GHC_NO_DIRENT_D_TYPE` allows os detection to support systems without
+  the `dirent.d_type` member, experimental first QNX compile support as
+  initial use case, fixed issue with filesystems returning DT_UNKNOWN
+  (e.g. reiserfs).
+* Pull request [#115](https://github.com/gulrak/filesystem/pull/115), added
+  `string_view` support when clang with libstdc++ is detected.
+* Fix for [#114](https://github.com/gulrak/filesystem/issues/114), for macOS
+  the pre-Catalina deployment target detection worked only if `<Availability.h>`
+  was included before `<ghc/fs_std.hpp>` or `<ghc/fs_std_fwd.hpp>`/`<ghc/fs_std_impl.hpp>`.
+* Fix for [#113](https://github.com/gulrak/filesystem/issues/113), the use of
+  standard chapter numbers was misleading since C++17 and C++20 `std::filesystem`
+  features are supported, and was replaced by the tag-like chapter names that
+  stay (mostly) consistent over the versions.
+
 ### [v1.5.4](https://github.com/gulrak/filesystem/releases/tag/v1.5.4)
 
-* Pull request [#112](https://github.com/gulrak/filesystem/issues/112), lots
+* Pull request [#112](https://github.com/gulrak/filesystem/pull/112), lots
   of cleanup work on the readme, thanks!
 * Enhancement for [#111](https://github.com/gulrak/filesystem/issues/111),
   further optimization of directory iteration, performance for
@@ -550,15 +601,15 @@ to the expected behavior.
   made to allow the tests to compile and run successfully (tested with GCC
   10.2.0), feedback and additional PRs welcome as it is currently not
   part of the CI configuration.
-* Pull request [#109](https://github.com/gulrak/filesystem/issues/109), various
+* Pull request [#109](https://github.com/gulrak/filesystem/pull/109), various
   spelling errors in error messages and comments fixed.
-* Pull request [#108](https://github.com/gulrak/filesystem/issues/108), old
+* Pull request [#108](https://github.com/gulrak/filesystem/pull/108), old
   style casts removed.
 * Fix for [#107](https://github.com/gulrak/filesystem/issues/107), the error
   handling for status calls was suppressing errors on symlink targets.
-* Pull request [#106](https://github.com/gulrak/filesystem/issues/106), fixed
+* Pull request [#106](https://github.com/gulrak/filesystem/pull/106), fixed
   detection of AppleClang for compile options.
-* Pull request [#105](https://github.com/gulrak/filesystem/issues/105), added
+* Pull request [#105](https://github.com/gulrak/filesystem/pull/105), added
   option `GHC_FILESYSTEM_BUILD_STD_TESTING` to override additional build of
   `std::filesystem` versions of the tests for comparison and the possibility
   to use `GHC_FILESYSTEM_TEST_COMPILE_FEATURES` to prefill the used compile
