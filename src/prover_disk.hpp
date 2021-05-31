@@ -430,10 +430,11 @@ private:
             c1_index -= kCheckpoint2Interval;
         }
 
-        uint32_t c1_entry_size = Util::ByteAlign(k) / 8;
+        uint32_t const byte_align = Util::ByteAlign(k);
+        uint32_t c1_entry_size = byte_align / 8;
 
         auto* c1_entry_bytes = new uint8_t[c1_entry_size];
-        SafeSeek(disk_file, table_begin_pointers[8] + c1_index * Util::ByteAlign(k) / 8);
+        SafeSeek(disk_file, table_begin_pointers[8] + c1_index * byte_align / 8);
 
         uint64_t curr_f7 = c2_entry_f;
         uint64_t prev_f7 = c2_entry_f;
@@ -441,7 +442,7 @@ private:
         // Goes through C2 entries until we find the correct C1 checkpoint.
         for (uint64_t start = 0; start < kCheckpoint1Interval; start++) {
             SafeRead(disk_file, c1_entry_bytes, c1_entry_size);
-            Bits c1_entry = Bits(c1_entry_bytes, Util::ByteAlign(k) / 8, Util::ByteAlign(k));
+            Bits c1_entry = Bits(c1_entry_bytes, byte_align / 8, byte_align);
             uint64_t read_f7 = c1_entry.Slice(0, k).GetValue();
 
             if (start != 0 && read_f7 == 0) {
@@ -481,9 +482,9 @@ private:
         if (double_entry) {
             // In this case, we read the previous park as well as the current one
             c1_index -= 1;
-            SafeSeek(disk_file, table_begin_pointers[8] + c1_index * Util::ByteAlign(k) / 8);
-            SafeRead(disk_file, c1_entry_bytes, Util::ByteAlign(k) / 8);
-            Bits c1_entry_bits = Bits(c1_entry_bytes, Util::ByteAlign(k) / 8, Util::ByteAlign(k));
+            SafeSeek(disk_file, table_begin_pointers[8] + c1_index * byte_align / 8);
+            SafeRead(disk_file, c1_entry_bytes, byte_align / 8);
+            Bits c1_entry_bits = Bits(c1_entry_bytes, byte_align / 8, byte_align);
             next_f7 = curr_f7;
             curr_f7 = c1_entry_bits.Slice(0, k).GetValue();
 

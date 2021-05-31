@@ -26,7 +26,7 @@
 
 // 64 * 2^16. 2^17 values, each value can store 64 bits.
 #define kMaxSizeBits 8388608
-
+#define USE_MEM_FUNC 0
 // A stack vector of length 5, having the functions of std::vector needed for Bits.
 struct SmallVector {
     typedef uint16_t size_type;
@@ -122,8 +122,9 @@ public:
     {
         this->last_size_ = 0;
         if (size > 64) {
+            uint8_t size_bit = Util::GetSizeBits(value);
             // Get number of extra 0s added at the beginning.
-            uint32_t zeros = size - Util::GetSizeBits(value);
+            uint32_t zeros = size - size_bit;
             // Add a full group of 0s (length 64)
             while (zeros > 64) {
                 AppendValue(0, 64);
@@ -131,7 +132,7 @@ public:
             }
             // Add the incomplete group of 0s and then the value.
             AppendValue(0, zeros);
-            AppendValue(value, Util::GetSizeBits(value));
+            AppendValue(value, size_bit);
         } else {
             /* 'value' must be under 'size' bits. */
             assert(size == 64 || value == (value & ((1ULL << size) - 1)));
@@ -365,7 +366,7 @@ public:
     void AppendValue(uint128_t value, uint8_t length)
     {
         if (length > 64) {
-            std::cout << "SPLITTING AppendValue" << std::endl;
+            // std::cout << "SPLITTING AppendValue" << std::endl;
             DoAppendValue(value >> 64, length - 64);
             DoAppendValue((uint64_t)value, 64);
         } else {
@@ -454,11 +455,15 @@ bool operator==(const BitsGeneric<T>& lhs, const BitsGeneric<T>& rhs)
     if (lhs.GetSize() != rhs.GetSize()) {
         return false;
     }
-    for (uint32_t i = 0; i < lhs.values_.size(); i++) {
-        if (lhs.values_[i] != rhs.values_[i]) {
-            return false;
+    #if USE_MEM_FUNC
+        return 0 == memcmp(&lhs.values_, &rhs.values_, lhs.values_.size());
+    #else
+        for (uint32_t i = 0; i < lhs.values_.size(); i++) {
+            if (lhs.values_[i] != rhs.values_[i]) {
+                return false;
+            }
         }
-    }
+    #endif
     return true;
 }
 
@@ -467,27 +472,35 @@ bool operator<(const BitsGeneric<T>& lhs, const BitsGeneric<T>& rhs)
 {
     if (lhs.GetSize() != rhs.GetSize())
         throw InvalidStateException("Different sizes!");
-    for (uint32_t i = 0; i < lhs.values_.size(); i++) {
-        if (lhs.values_[i] < rhs.values_[i])
-            return true;
-        if (lhs.values_[i] > rhs.values_[i])
-            return false;
-    }
-    return false;
+    #if USE_MEM_FUNC
+        return 0 < memcmp(&lhs.values_, &rhs.values_, lhs.values_.size());
+    #else
+        for (uint32_t i = 0; i < lhs.values_.size(); i++) {
+            if (lhs.values_[i] < rhs.values_[i])
+                return true;
+            if (lhs.values_[i] > rhs.values_[i])
+                return false;
+        }
+        return false;
+    #endif
 }
 
 template <class T>
 bool operator>(const BitsGeneric<T>& lhs, const BitsGeneric<T>& rhs)
 {
-    if (lhs.GetSize() != rhs.GetSize())
-        throw InvalidStateException("Different sizes!");
-    for (uint32_t i = 0; i < lhs.values_.size(); i++) {
-        if (lhs.values_[i] > rhs.values_[i])
-            return true;
-        if (lhs.values_[i] < rhs.values_[i])
-            return false;
-    }
-    return false;
+    #if USE_MEM_FUNC
+        return 0 > memcmp(&lhs.values_, &rhs.values_, lhs.values_.size());
+    #else
+        if (lhs.GetSize() != rhs.GetSize())
+            throw InvalidStateException("Different sizes!");
+        for (uint32_t i = 0; i < lhs.values_.size(); i++) {
+            if (lhs.values_[i] > rhs.values_[i])
+                return true;
+            if (lhs.values_[i] < rhs.values_[i])
+                return false;
+        }
+        return false;
+    #endif
 }
 
 template <class T>
