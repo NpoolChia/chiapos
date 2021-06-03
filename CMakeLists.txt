@@ -16,26 +16,26 @@ project(chiapos C CXX ASM)
 # CMake 3.14+
 include(FetchContent)
 
-FetchContent_Declare(
-  pybind11-src
-  GIT_REPOSITORY https://github.com/pybind/pybind11.git
-  GIT_TAG        v2.6.2
-)
-FetchContent_MakeAvailable(pybind11-src)
-
-FetchContent_Declare(
-  cxxopts
-  GIT_REPOSITORY https://github.com/jarro2783/cxxopts.git
-  GIT_TAG        v2.2.1
-)
-FetchContent_MakeAvailable(cxxopts)
-
-FetchContent_Declare(
-  gulrak
-  GIT_REPOSITORY https://github.com/gulrak/filesystem.git
-  GIT_TAG        v1.5.6
-)
-FetchContent_MakeAvailable(gulrak)
+# FetchContent_Declare(
+#   pybind11-src
+#   GIT_REPOSITORY https://github.com/pybind/pybind11.git
+#   GIT_TAG        v2.6.2
+# )
+# FetchContent_MakeAvailable(pybind11-src)
+# 
+# FetchContent_Declare(
+#   cxxopts
+#   GIT_REPOSITORY https://github.com/jarro2783/cxxopts.git
+#   GIT_TAG        v2.2.1
+# )
+# FetchContent_MakeAvailable(cxxopts)
+# 
+# FetchContent_Declare(
+#   gulrak
+#   GIT_REPOSITORY https://github.com/gulrak/filesystem.git
+#   GIT_TAG        v1.5.6
+# )
+# FetchContent_MakeAvailable(gulrak)
 
 set(FSE_LIB ${CMAKE_CURRENT_SOURCE_DIR}/lib/FiniteStateEntropy/lib)
 set(FSE_FILES
