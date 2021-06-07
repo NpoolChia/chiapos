@@ -33,6 +33,12 @@
 #include <memory>
 #include <mutex>
 
+#include <pthread.h>
+#include <string.h>
+extern "C" {
+#include "list.h"
+}
+
 #include "chia_filesystem.hpp"
 
 #include "calculate_bucket.hpp"
@@ -115,6 +121,70 @@ PlotEntry GetLeftEntry(
     return left_entry;
 }
 
+static inline void calculateBucket(FxCalculator* f, int i, std::pair<Bits, Bits>* output, PlotEntry* L_entry, PlotEntry* R_entry, uint8_t const k, uint8_t const metadata_size)
+{
+    if (metadata_size <= 128) {
+        output[i] = f->CalculateBucket(
+                Bits(L_entry->y, k + kExtraBits),
+                Bits(L_entry->left_metadata, metadata_size),
+                Bits(R_entry->left_metadata, metadata_size));
+    } else {
+        output[i] = f->CalculateBucket(
+                Bits(L_entry->y, k + kExtraBits),
+                Bits(L_entry->left_metadata, 128) +
+                Bits(L_entry->right_metadata, metadata_size - 128),
+                Bits(R_entry->left_metadata, 128) +
+                Bits(R_entry->right_metadata, metadata_size - 128));
+    }
+}
+
+typedef struct {
+    struct list_head link;
+    FxCalculator *f;
+    int i;
+    std::pair<Bits, Bits> *output;
+    PlotEntry *L_entry;
+    PlotEntry *R_entry;
+    uint8_t k;
+    uint8_t metadata_size;
+} calc_t;
+
+static inline void *calculateBucketByPthread(void *arg)
+{
+    calc_t *t = (calc_t *)arg;
+    calculateBucket(t->f, t->i, t->output, t->L_entry, t->R_entry, t->k, t->metadata_size);
+    return nullptr;
+}
+
+typedef struct {
+    struct list_head head;
+    pthread_mutex_t mutex;
+    bool finished;
+    bool quit;
+} arg_t;
+
+static inline void* phase1_runner(void *arg)
+{
+    arg_t *t = (arg_t *)arg;
+
+    while (true) {
+        if (t->finished) {
+            t->quit = true;
+            return nullptr;
+        }
+        calc_t *p = nullptr, *n = nullptr;
+        pthread_mutex_lock(&t->mutex);
+        list_for_each_entry_safe(p, n, &t->head, link) {
+            calculateBucketByPthread(p);
+            __list_del(p->link.prev, p->link.next);
+            free(p);
+        }
+        pthread_mutex_unlock(&t->mutex);
+    }
+
+    return nullptr;
+}
+
 void* phase1_thread(THREADDATA* ptd)
 {
     uint64_t const right_entry_size_bytes = ptd->right_entry_size_bytes;
@@ -136,6 +206,17 @@ void* phase1_thread(THREADDATA* ptd)
     std::unique_ptr<uint8_t[]> left_writer_buf(new uint8_t[left_buf_entries * compressed_entry_size_bytes + 7]);
 
     FxCalculator f(k, table_index + 1);
+
+#define IDX_STEP 1
+    pthread_t runners[IDX_STEP];
+    arg_t args[IDX_STEP];
+
+    for (int32_t i = 0; i < IDX_STEP; i++) {
+        INIT_LIST_HEAD(&args[i].head);
+        args[i].quit = false;
+        args[i].finished = false;
+        pthread_create(&runners[i], NULL, phase1_runner, &args[i]);
+    }
 
     // Stores map of old positions to new positions (positions after dropping entries from L
     // table that did not match) Map ke
@@ -354,32 +435,50 @@ void* phase1_thread(THREADDATA* ptd)
                     current_entries_to_write = std::move(future_entries_to_write);
                     future_entries_to_write.clear();
 
+                    std::pair<Bits, Bits> output[10000];
+
+                    for (int32_t i=0; i < idx_count; i+=IDX_STEP) {
+                        for (int j=0; j < IDX_STEP; j++) {
+                            if (idx_count <= i + j) {
+                                break;
+                            }
+
+                            PlotEntry& L_entry = bucket_L[idx_L[i + j]];
+                            PlotEntry& R_entry = bucket_R[idx_R[i + j]];
+
+                            if (bStripeStartPair)
+                                matches++;
+
+                            // Sets the R entry to used so that we don't drop in next iteration
+                            R_entry.used = true;
+
+                            calc_t *t = (calc_t *)malloc(sizeof(calc_t));
+                            t->f = &f;
+                            t->i = i + j;
+                            t->output = output;
+                            t->L_entry = &L_entry;
+                            t->R_entry = &R_entry;
+                            t->k = k;
+                            t->metadata_size = metadata_size;
+                            INIT_LIST_HEAD(&t->link);
+
+                            pthread_mutex_lock(&args[j].mutex);
+                            list_add_tail(&t->link, &args[j].head);
+                            pthread_mutex_unlock(&args[j].mutex);
+                        }
+                    }
+
+                    for (int32_t j=0; j < IDX_STEP; j++) {
+                        args[j].finished = true;
+                        while (!args[j].quit) {
+                            sleep(1);
+                        }
+                    }
+
                     for (int32_t i=0; i < idx_count; i++) {
                         PlotEntry& L_entry = bucket_L[idx_L[i]];
                         PlotEntry& R_entry = bucket_R[idx_R[i]];
-
-                        if (bStripeStartPair)
-                            matches++;
-
-                        // Sets the R entry to used so that we don't drop in next iteration
-                        R_entry.used = true;
-                        // Computes the output pair (fx, new_metadata)
-                        if (metadata_size <= 128) {
-                            const std::pair<Bits, Bits>& f_output = f.CalculateBucket(
-                                Bits(L_entry.y, k + kExtraBits),
-                                Bits(L_entry.left_metadata, metadata_size),
-                                Bits(R_entry.left_metadata, metadata_size));
-                            future_entries_to_write.emplace_back(L_entry, R_entry, f_output);
-                        } else {
-                            // Metadata does not fit into 128 bits
-                            const std::pair<Bits, Bits>& f_output = f.CalculateBucket(
-                                Bits(L_entry.y, k + kExtraBits),
-                                Bits(L_entry.left_metadata, 128) +
-                                    Bits(L_entry.right_metadata, metadata_size - 128),
-                                Bits(R_entry.left_metadata, 128) +
-                                    Bits(R_entry.right_metadata, metadata_size - 128));
-                            future_entries_to_write.emplace_back(L_entry, R_entry, f_output);
-                        }
+                        future_entries_to_write.emplace_back(L_entry, R_entry, output[i]);
                     }
 
                     // At this point, future_entries_to_write contains the matches of buckets L
@@ -522,6 +621,10 @@ void* phase1_thread(THREADDATA* ptd)
 
         globals.matches += matches;
         Sem::Post(ptd->mine);
+    }
+
+    for (int32_t j=0; j < IDX_STEP; j++) {
+        pthread_join(runners[j], nullptr);
     }
 
     return 0;

@@ -296,6 +296,9 @@ private:
 
         // Do SortInMemory algorithm if it fits in the memory
         // (number of entries required * entry_size_) <= total memory available
+
+        Timer sort_timer;
+
         if (!force_quicksort &&
             round_bucket_entries * entry_size_ <= memory_size_) {
             std::cout << "\tBucket " << bucket_i << " uniform sort. Ram: " << std::fixed
@@ -320,6 +323,8 @@ private:
             b.underlying_file.Read(0, memory_start_.get(), bucket_entries * entry_size_);
             QuickSort::Sort(memory_start_.get(), entry_size_, bucket_entries, begin_bits_ + log_num_buckets_);
         }
+
+        sort_timer.PrintElapsed("SortToMemory");
 
         // Deletes the bucket file
         std::string filename = b.file.GetFileName();
