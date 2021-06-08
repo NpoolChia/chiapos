@@ -124,17 +124,19 @@ PlotEntry GetLeftEntry(
 static inline void calculateBucket(FxCalculator* f, int i, std::pair<Bits, Bits>* output, PlotEntry* L_entry, PlotEntry* R_entry, uint8_t const k, uint8_t const metadata_size)
 {
     if (metadata_size <= 128) {
-        output[i] = f->CalculateBucket(
+        std::pair<Bits, Bits> f_output = f->CalculateBucket(
                 Bits(L_entry->y, k + kExtraBits),
                 Bits(L_entry->left_metadata, metadata_size),
                 Bits(R_entry->left_metadata, metadata_size));
+        output[i] = f_output;
     } else {
-        output[i] = f->CalculateBucket(
+        std::pair<Bits, Bits> f_output = f->CalculateBucket(
                 Bits(L_entry->y, k + kExtraBits),
                 Bits(L_entry->left_metadata, 128) +
                 Bits(L_entry->right_metadata, metadata_size - 128),
                 Bits(R_entry->left_metadata, 128) +
                 Bits(R_entry->right_metadata, metadata_size - 128));
+        output[i] = f_output;
     }
 }
 
@@ -162,22 +164,22 @@ typedef struct {
     pthread_mutex_t mutex;
     bool finished;
     bool quit;
+    bool calc_done;
 } arg_t;
 
 static inline void* phase1_runner(void *arg)
 {
     arg_t *t = (arg_t *)arg;
 
-    while (true) {
+    while (!t->quit) {
         calc_t *p = nullptr;
         pthread_mutex_lock(&t->mutex);
 
         if (t->get_idx == t->put_idx) {
-            pthread_mutex_unlock(&t->mutex);
             if (t->finished) {
-                t->quit = true;
-                return nullptr;
+                t->calc_done = true;
             }
+            pthread_mutex_unlock(&t->mutex);
             continue;
         }
 
@@ -226,6 +228,7 @@ void* phase1_thread(THREADDATA* ptd)
         args[i].get_idx = -1;
         args[i].quit = false;
         args[i].finished = false;
+        pthread_mutex_init(&args[i].mutex, nullptr);
         pthread_create(&runners[i], NULL, phase1_runner, &args[i]);
     }
 
@@ -446,8 +449,17 @@ void* phase1_thread(THREADDATA* ptd)
                     current_entries_to_write = std::move(future_entries_to_write);
                     future_entries_to_write.clear();
 
-                    std::pair<Bits, Bits> *output = (std::pair<Bits, Bits> *)malloc(sizeof(std::pair<Bits, Bits>) * 10000);
+                    std::pair<Bits, Bits> *output = (std::pair<Bits, Bits> *)malloc(sizeof(std::pair<Bits, Bits> *) * 10000);
                     calc_t *calcs = (calc_t *)malloc(sizeof(calc_t) * 10000);;
+
+                    for (int j=0; j < IDX_STEP; j++) {
+                        pthread_mutex_lock(&args[j].mutex);
+                        args[j].put_idx = -1;
+                        args[j].get_idx = -1;
+                        args[j].finished = false;
+                        args[j].quit = false;
+                        pthread_mutex_unlock(&args[j].mutex);
+                    }
 
                     for (int32_t i=0; i < idx_count; i+=IDX_STEP) {
                         for (int j=0; j < IDX_STEP; j++) {
@@ -472,7 +484,7 @@ void* phase1_thread(THREADDATA* ptd)
                             t->R_entry = &R_entry;
                             t->k = k;
                             t->metadata_size = metadata_size;
-#define RUNNER
+// #define RUNNER
 #ifdef RUNNER
                             pthread_mutex_lock(&args[j].mutex);
                             args[j].put_idx += 1;
@@ -486,7 +498,7 @@ void* phase1_thread(THREADDATA* ptd)
 
                     for (int32_t j=0; j < IDX_STEP; j++) {
                         args[j].finished = true;
-                        while (!args[j].quit) {
+                        while (!args[j].calc_done) {
                             sleep(1);
                         }
                     }
@@ -643,6 +655,7 @@ void* phase1_thread(THREADDATA* ptd)
     }
 
     for (int32_t j=0; j < IDX_STEP; j++) {
+        args[j].quit = true;
         pthread_join(runners[j], nullptr);
         free(args[j].calcs);
     }
