@@ -157,39 +157,46 @@ static inline void *calculateBucketByPthread(void *arg)
     return nullptr;
 }
 
+#define IDX_STEP 4
+#define RUNNER
+
 typedef struct {
     calc_t **calcs;
-    int put_idx;
-    int get_idx;
-    pthread_mutex_t mutex;
-    bool finished;
+    int count;
+    bool done;
+    bool caculating;
     bool quit;
-    bool calc_done;
+    pthread_cond_t calc_cond;
+    pthread_mutex_t mutex;
+    pthread_cond_t done_cond;
+    int index;
 } arg_t;
 
 static inline void* phase1_runner(void *arg)
 {
     arg_t *t = (arg_t *)arg;
+#ifndef RUNNER
+    return nullptr;
+#endif
 
     while (!t->quit) {
-        calc_t *p = nullptr;
         pthread_mutex_lock(&t->mutex);
-
-        if (t->get_idx == t->put_idx) {
-            if (t->finished) {
-                t->calc_done = true;
-            }
-            pthread_mutex_unlock(&t->mutex);
-            continue;
+        if (!t->caculating) {
+            pthread_cond_wait(&t->calc_cond, &t->mutex);
         }
-
-        t->get_idx += 1;
-        p = t->calcs[t->get_idx];
-
         pthread_mutex_unlock(&t->mutex);
-        if (p != nullptr) {
-            calculateBucketByPthread(p);
+
+        for (int i = 0; i < t->count; i++) {
+            calc_t *p = t->calcs[i];
+            if (p != nullptr) {
+                calculateBucketByPthread(p);
+            }
         }
+
+        pthread_mutex_lock(&t->mutex);
+        pthread_cond_signal(&t->done_cond);
+        t->done = true;
+        pthread_mutex_unlock(&t->mutex);
     }
 
     return nullptr;
@@ -217,18 +224,19 @@ void* phase1_thread(THREADDATA* ptd)
 
     FxCalculator f(k, table_index + 1);
 
-#define IDX_STEP 8
     pthread_t runners[IDX_STEP];
     arg_t args[IDX_STEP];
 
     for (int32_t i = 0; i < IDX_STEP; i++) {
         args[i].calcs = (calc_t **)malloc(sizeof(calc_t *) * 10000);
         memset(args[i].calcs, 0x0, 10000 * sizeof(calc_t *));
-        args[i].put_idx = -1;
-        args[i].get_idx = -1;
         args[i].quit = false;
-        args[i].finished = false;
+        args[i].caculating = false;
+        args[i].done = false;
+        args[i].index = i;
+        pthread_cond_init(&args[i].calc_cond, nullptr);
         pthread_mutex_init(&args[i].mutex, nullptr);
+        pthread_cond_init(&args[i].done_cond, nullptr);
         pthread_create(&runners[i], NULL, phase1_runner, &args[i]);
     }
 
@@ -449,16 +457,13 @@ void* phase1_thread(THREADDATA* ptd)
                     current_entries_to_write = std::move(future_entries_to_write);
                     future_entries_to_write.clear();
 
-                    std::pair<Bits, Bits> *output = (std::pair<Bits, Bits> *)malloc(sizeof(std::pair<Bits, Bits> *) * 10000);
+                    std::pair<Bits, Bits> *output = (std::pair<Bits, Bits> *)malloc(sizeof(std::pair<Bits, Bits>) * 10000);
                     calc_t *calcs = (calc_t *)malloc(sizeof(calc_t) * 10000);;
 
                     for (int j=0; j < IDX_STEP; j++) {
-                        pthread_mutex_lock(&args[j].mutex);
-                        args[j].put_idx = -1;
-                        args[j].get_idx = -1;
-                        args[j].finished = false;
-                        args[j].quit = false;
-                        pthread_mutex_unlock(&args[j].mutex);
+                        args[j].count = 0;
+                        args[j].done = false;
+                        args[j].caculating = false;
                     }
 
                     for (int32_t i=0; i < idx_count; i+=IDX_STEP) {
@@ -484,24 +489,32 @@ void* phase1_thread(THREADDATA* ptd)
                             t->R_entry = &R_entry;
                             t->k = k;
                             t->metadata_size = metadata_size;
-// #define RUNNER
 #ifdef RUNNER
-                            pthread_mutex_lock(&args[j].mutex);
-                            args[j].put_idx += 1;
-                            args[j].calcs[args[j].put_idx] = t;
-                            pthread_mutex_unlock(&args[j].mutex);
+                            args[j].calcs[args[j].count++] = t;
 #else
                             calculateBucketByPthread(t);
 #endif
                         }
                     }
 
+#ifdef RUNNER
                     for (int32_t j=0; j < IDX_STEP; j++) {
-                        args[j].finished = true;
-                        while (!args[j].calc_done) {
-                            sleep(1);
-                        }
+                        pthread_mutex_lock(&args[j].mutex);
+                        pthread_cond_signal(&args[j].calc_cond);
+                        args[j].caculating = true;
+                        pthread_mutex_unlock(&args[j].mutex);
                     }
+
+                    for (int32_t j=0; j < IDX_STEP; j++) {
+                        pthread_mutex_lock(&args[j].mutex);
+                        if (!args[j].done) {
+                            pthread_cond_wait(&args[j].done_cond, &args[j].mutex);
+                        }
+                        args[j].caculating = false;
+                        pthread_mutex_unlock(&args[j].mutex);
+                        args[j].count = 0;
+                    }
+#endif
 
                     for (int32_t i=0; i < idx_count; i++) {
                         PlotEntry& L_entry = bucket_L[idx_L[i]];
@@ -656,6 +669,9 @@ void* phase1_thread(THREADDATA* ptd)
 
     for (int32_t j=0; j < IDX_STEP; j++) {
         args[j].quit = true;
+        pthread_mutex_lock(&args[j].mutex);
+        pthread_cond_signal(&args[j].calc_cond);
+        pthread_mutex_unlock(&args[j].mutex);
         pthread_join(runners[j], nullptr);
         free(args[j].calcs);
     }
