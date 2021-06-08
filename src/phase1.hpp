@@ -139,7 +139,6 @@ static inline void calculateBucket(FxCalculator* f, int i, std::pair<Bits, Bits>
 }
 
 typedef struct {
-    struct list_head link;
     FxCalculator *f;
     int i;
     std::pair<Bits, Bits> *output;
@@ -157,7 +156,9 @@ static inline void *calculateBucketByPthread(void *arg)
 }
 
 typedef struct {
-    struct list_head head;
+    calc_t **calcs;
+    int put_idx;
+    int get_idx;
     pthread_mutex_t mutex;
     bool finished;
     bool quit;
@@ -168,18 +169,25 @@ static inline void* phase1_runner(void *arg)
     arg_t *t = (arg_t *)arg;
 
     while (true) {
-        if (t->finished) {
-            t->quit = true;
-            return nullptr;
-        }
-        calc_t *p = nullptr, *n = nullptr;
+        calc_t *p = nullptr;
         pthread_mutex_lock(&t->mutex);
-        list_for_each_entry_safe(p, n, &t->head, link) {
-            calculateBucketByPthread(p);
-            __list_del(p->link.prev, p->link.next);
-            free(p);
+
+        if (t->get_idx == t->put_idx) {
+            pthread_mutex_unlock(&t->mutex);
+            if (t->finished) {
+                t->quit = true;
+                return nullptr;
+            }
+            continue;
         }
+
+        t->get_idx += 1;
+        p = t->calcs[t->get_idx];
+
         pthread_mutex_unlock(&t->mutex);
+        if (p != nullptr) {
+            calculateBucketByPthread(p);
+        }
     }
 
     return nullptr;
@@ -207,12 +215,15 @@ void* phase1_thread(THREADDATA* ptd)
 
     FxCalculator f(k, table_index + 1);
 
-#define IDX_STEP 1
+#define IDX_STEP 8
     pthread_t runners[IDX_STEP];
     arg_t args[IDX_STEP];
 
     for (int32_t i = 0; i < IDX_STEP; i++) {
-        INIT_LIST_HEAD(&args[i].head);
+        args[i].calcs = (calc_t **)malloc(sizeof(calc_t *) * 10000);
+        memset(args[i].calcs, 0x0, 10000 * sizeof(calc_t *));
+        args[i].put_idx = -1;
+        args[i].get_idx = -1;
         args[i].quit = false;
         args[i].finished = false;
         pthread_create(&runners[i], NULL, phase1_runner, &args[i]);
@@ -435,7 +446,8 @@ void* phase1_thread(THREADDATA* ptd)
                     current_entries_to_write = std::move(future_entries_to_write);
                     future_entries_to_write.clear();
 
-                    std::pair<Bits, Bits> output[10000];
+                    std::pair<Bits, Bits> *output = (std::pair<Bits, Bits> *)malloc(sizeof(std::pair<Bits, Bits>) * 10000);
+                    calc_t *calcs = (calc_t *)malloc(sizeof(calc_t) * 10000);;
 
                     for (int32_t i=0; i < idx_count; i+=IDX_STEP) {
                         for (int j=0; j < IDX_STEP; j++) {
@@ -452,7 +464,7 @@ void* phase1_thread(THREADDATA* ptd)
                             // Sets the R entry to used so that we don't drop in next iteration
                             R_entry.used = true;
 
-                            calc_t *t = (calc_t *)malloc(sizeof(calc_t));
+                            calc_t *t = &calcs[i + j];
                             t->f = &f;
                             t->i = i + j;
                             t->output = output;
@@ -460,11 +472,15 @@ void* phase1_thread(THREADDATA* ptd)
                             t->R_entry = &R_entry;
                             t->k = k;
                             t->metadata_size = metadata_size;
-                            INIT_LIST_HEAD(&t->link);
-
+#define RUNNER
+#ifdef RUNNER
                             pthread_mutex_lock(&args[j].mutex);
-                            list_add_tail(&t->link, &args[j].head);
+                            args[j].put_idx += 1;
+                            args[j].calcs[args[j].put_idx] = t;
                             pthread_mutex_unlock(&args[j].mutex);
+#else
+                            calculateBucketByPthread(t);
+#endif
                         }
                     }
 
@@ -480,6 +496,9 @@ void* phase1_thread(THREADDATA* ptd)
                         PlotEntry& R_entry = bucket_R[idx_R[i]];
                         future_entries_to_write.emplace_back(L_entry, R_entry, output[i]);
                     }
+
+                    free(calcs);
+                    free(output);
 
                     // At this point, future_entries_to_write contains the matches of buckets L
                     // and R, and current_entries_to_write contains the matches of L and the
@@ -625,6 +644,7 @@ void* phase1_thread(THREADDATA* ptd)
 
     for (int32_t j=0; j < IDX_STEP; j++) {
         pthread_join(runners[j], nullptr);
+        free(args[j].calcs);
     }
 
     return 0;
