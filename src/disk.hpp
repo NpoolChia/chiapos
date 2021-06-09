@@ -35,6 +35,8 @@ using namespace std::chrono_literals; // for operator""min;
 #include "./util.hpp"
 #include "bitfield.hpp"
 
+#include <sys/mman.h>
+
 constexpr uint64_t write_cache = 1024 * 1024;
 constexpr uint64_t read_ahead = 1024 * 1024;
 
@@ -132,6 +134,7 @@ struct FileDisk {
 
 #ifdef CACHE
         cache_ = (uint8_t *) malloc(cap_);
+        mlock(cache_, cap_);
         offset_ = size_ = 0;
 #endif
     }
@@ -158,6 +161,7 @@ struct FileDisk {
         ::fseek(f_, offset_, SEEK_SET);
         ::fwrite(reinterpret_cast<const char *>(cache_), sizeof(uint8_t), size_, f_);
         free(cache_);
+        munlock(cache_, cap_);
         size_ = offset_ = 0;
 #endif
         ::fclose(f_);
@@ -201,6 +205,7 @@ struct FileDisk {
             {
                 amtread = ::fread(reinterpret_cast<char *>(memcache), sizeof(uint8_t), length, f_);
 #ifdef CACHE
+                offset_ = begin;
                 if (amtread <= cap_) {
                     memcpy(cache_, memcache, amtread);
                     size_ = amtread;
@@ -208,7 +213,6 @@ struct FileDisk {
                     memcpy(cache_, memcache, cap_);
                     size_ = cap_;
                 }
-                offset_ = begin;
 #endif
             }
             readPos = begin + amtread;
@@ -252,7 +256,7 @@ struct FileDisk {
             if (offset_ <= begin && begin + length - 1 < offset_ + size_) {
                 memcpy(&cache_[begin - offset_], memcache, length);
             } else if (begin == offset_ + size_ && begin + length - 1 < offset_ + cap_) {
-                memcpy(&cache_[begin], memcache, length);
+                memcpy(&cache_[size_], memcache, length);
                 size_ += length;
             } else
 #endif
