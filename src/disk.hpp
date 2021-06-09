@@ -97,6 +97,8 @@ void disk_log(fs::path const& filename, op_t const op, uint64_t offset, uint64_t
 }
 #endif
 
+#define CACHE
+
 struct FileDisk {
     explicit FileDisk(const fs::path &filename)
     {
@@ -127,12 +129,22 @@ struct FileDisk {
                 }
             }
         } while (f_ == nullptr);
+
+#ifdef CACHE
+        cache_ = (uint8_t *) malloc(cap_);
+        offset_ = size_ = 0;
+#endif
     }
 
     FileDisk(FileDisk &&fd)
     {
         filename_ = std::move(fd.filename_);
         f_ = fd.f_;
+#ifdef CACHE
+        cache_ = fd.cache_;
+        size_ = fd.size_;
+        offset_ = fd.offset_;
+#endif
         fd.f_ = nullptr;
     }
 
@@ -142,6 +154,12 @@ struct FileDisk {
     void Close()
     {
         if (f_ == nullptr) return;
+#ifdef CACHE
+        ::fseek(f_, offset_, SEEK_SET);
+        ::fwrite(reinterpret_cast<const char *>(cache_), sizeof(uint8_t), size_, f_);
+        free(cache_);
+        size_ = offset_ = 0;
+#endif
         ::fclose(f_);
         f_ = nullptr;
         readPos = 0;
@@ -152,6 +170,7 @@ struct FileDisk {
 
     void Read(uint64_t begin, uint8_t *memcache, uint64_t length)
     {
+        // std::cout << "Read " << length << " at " << begin << " from " << filename_ << " cache offset " << offset_ << " size " << size_ << std::endl;
         Open(retryOpenFlag);
 #if ENABLE_LOGGING
         disk_log(filename_, op_t::read, begin, length);
@@ -169,11 +188,34 @@ struct FileDisk {
 #endif
                 bReading = true;
             }
-            amtread = ::fread(reinterpret_cast<char *>(memcache), sizeof(uint8_t), length, f_);
+#ifdef CACHE
+            if (offset_ <= begin && begin + length - 1 < offset_ + size_) {
+                memcpy(memcache, &cache_[begin - offset_], length);
+                amtread = length;
+            } else if (begin == offset_ + size_ && begin + length - 1 < offset_ + cap_) {
+                amtread = ::fread(reinterpret_cast<char *>(memcache), sizeof(uint8_t), length, f_);
+                memcpy(&cache_[size_], memcache, amtread);
+                size_ += amtread;
+            } else
+#endif
+            {
+                amtread = ::fread(reinterpret_cast<char *>(memcache), sizeof(uint8_t), length, f_);
+#ifdef CACHE
+                if (amtread <= cap_) {
+                    memcpy(cache_, memcache, amtread);
+                    size_ = amtread;
+                } else {
+                    memcpy(cache_, memcache, cap_);
+                    size_ = cap_;
+                }
+                offset_ = begin;
+#endif
+            }
             readPos = begin + amtread;
             if (amtread != length) {
                 std::cout << "Only read " << amtread << " of " << length << " bytes at offset "
-                          << begin << " from " << filename_ << " with length " << writeMax
+                          << begin << " from " << filename_ << " with length " << writeMax << " cache offset "
+                          << offset_ << " cache size " << size_
                           << ". Error " << ferror(f_) << ". Retrying in five minutes." << std::endl;
                 // Close, Reopen, and re-seek the file to recover in case the filesystem
                 // has been remounted.
@@ -187,6 +229,7 @@ struct FileDisk {
 
     void Write(uint64_t begin, const uint8_t *memcache, uint64_t length)
     {
+        // std::cout << "Write " << length << " at " << begin << " to " << filename_ << " cache offset " << offset_ << " size " << size_ << std::endl;
         Open(writeFlag | retryOpenFlag);
 #if ENABLE_LOGGING
         disk_log(filename_, op_t::write, begin, length);
@@ -204,8 +247,29 @@ struct FileDisk {
 #endif
                 bReading = false;
             }
-            amtwritten =
-                ::fwrite(reinterpret_cast<const char *>(memcache), sizeof(uint8_t), length, f_);
+#ifdef CACHE
+            amtwritten = length;
+            if (offset_ <= begin && begin + length - 1 < offset_ + size_) {
+                memcpy(&cache_[begin - offset_], memcache, length);
+            } else if (begin == offset_ + size_ && begin + length - 1 < offset_ + cap_) {
+                memcpy(&cache_[begin], memcache, length);
+                size_ += length;
+            } else
+#endif
+            {
+                amtwritten =
+                    ::fwrite(reinterpret_cast<const char *>(memcache), sizeof(uint8_t), length, f_);
+#ifdef CACHE
+                offset_ = begin;
+                if (amtwritten <= cap_) {
+                    memcpy(cache_, memcache, amtwritten);
+                    size_ = amtwritten;
+                } else {
+                    memcpy(cache_, memcache, cap_);
+                    size_ = cap_;
+                }
+#endif
+            }
             writePos = begin + amtwritten;
             if (writePos > writeMax)
                 writeMax = writePos;
@@ -252,6 +316,11 @@ private:
 
     fs::path filename_;
     FILE *f_ = nullptr;
+
+    uint8_t *cache_ = nullptr;
+    uint64_t offset_ = 0;
+    uint64_t size_ = 0;
+    uint64_t cap_ = 256 * 1024 * 1024;
 
     static const uint8_t writeFlag = 0b01;
     static const uint8_t retryOpenFlag = 0b10;
