@@ -35,6 +35,11 @@ using namespace std::chrono_literals; // for operator""min;
 #include "./util.hpp"
 #include "bitfield.hpp"
 
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <sys/mman.h>
+
 constexpr uint64_t write_cache = 1024 * 1024;
 constexpr uint64_t read_ahead = 1024 * 1024;
 
@@ -47,10 +52,10 @@ struct Disk {
     virtual ~Disk() = default;
 };
 
+#include <fcntl.h>
 #if ENABLE_LOGGING
 // logging is currently unix / bsd only: use <fstream> or update
 // calls to ::open and ::write to port to windows
-#include <fcntl.h>
 #include <unistd.h>
 #include <mutex>
 #include <unordered_map>
@@ -97,6 +102,8 @@ void disk_log(fs::path const& filename, op_t const op, uint64_t offset, uint64_t
 }
 #endif
 
+#define ZERO_COPY
+
 struct FileDisk {
     explicit FileDisk(const fs::path &filename)
     {
@@ -127,12 +134,30 @@ struct FileDisk {
                 }
             }
         } while (f_ == nullptr);
+
+#ifdef ZERO_COPY
+        struct stat st;
+        fstat(fileno(f_), &st);
+
+        datalen_ = st.st_size;
+        if (0 < datalen_) {
+            filedata_ = mmap(nullptr, datalen_, PROT_READ | PROT_WRITE, MAP_PRIVATE, fileno(f_), dataofs_);
+            if (MAP_FAILED == filedata_) {
+                filedata_ = nullptr;
+            }
+        }
+#endif
     }
 
     FileDisk(FileDisk &&fd)
     {
         filename_ = std::move(fd.filename_);
         f_ = fd.f_;
+#ifdef ZERO_COPY
+        filedata_ = fd.filedata_;
+        dataofs_ = fd.dataofs_;
+        datalen_ = fd.datalen_;
+#endif
         fd.f_ = nullptr;
     }
 
@@ -142,6 +167,12 @@ struct FileDisk {
     void Close()
     {
         if (f_ == nullptr) return;
+#ifdef ZERO_COPY
+        munmap(filedata_, datalen_);
+        filedata_ = nullptr;
+        dataofs_ = 0;
+        datalen_ = 0;
+#endif
         ::fclose(f_);
         f_ = nullptr;
         readPos = 0;
@@ -169,7 +200,18 @@ struct FileDisk {
 #endif
                 bReading = true;
             }
-            amtread = ::fread(reinterpret_cast<char *>(memcache), sizeof(uint8_t), length, f_);
+#ifdef ZERO_COPY
+            if (nullptr != filedata_) {
+                amtread = datalen_ - (begin - dataofs_);
+                if (length < amtread) {
+                    amtread = length;
+                }
+                memcpy(memcache, filedata_ + begin - dataofs_, amtread);
+            } else
+#endif
+            {
+                amtread = ::fread(reinterpret_cast<char *>(memcache), sizeof(uint8_t), length, f_);
+            }
             readPos = begin + amtread;
             if (amtread != length) {
                 std::cout << "Only read " << amtread << " of " << length << " bytes at offset "
@@ -204,8 +246,37 @@ struct FileDisk {
 #endif
                 bReading = false;
             }
+#ifdef ZERO_COPY
+            if (dataofs_ <= begin && begin + length <= dataofs_ + datalen_ && nullptr != filedata_) {
+                // Do nothing
+            } else {
+                struct stat st;
+                fstat(fileno(f_), &st);
+                if (st.st_size < begin + length) {
+                    if (fallocate(fileno(f_), 0, st.st_size, maxlen_) < 0) {
+                        std::cout << "Fail to preallocate " << filename_ << std::endl;
+                    }
+                }
+
+                munmap(filedata_, datalen_);
+
+                dataofs_ = begin;
+                datalen_ = maxlen_;
+
+                dataofs_ = dataofs_ / 4096 * 4096;
+
+                filedata_ = mmap(nullptr, datalen_, PROT_READ | PROT_WRITE, MAP_PRIVATE, fileno(f_), dataofs_);
+                if (MAP_FAILED == filedata_) {
+                    std::cout << "Fail to mmap " << filename_ << std::endl;
+                    filedata_ = nullptr;
+                }
+            }
+            memcpy(filedata_ + begin - dataofs_, memcache, length);
+            amtwritten = length;
+#else
             amtwritten =
                 ::fwrite(reinterpret_cast<const char *>(memcache), sizeof(uint8_t), length, f_);
+#endif
             writePos = begin + amtwritten;
             if (writePos > writeMax)
                 writeMax = writePos;
@@ -252,6 +323,11 @@ private:
 
     fs::path filename_;
     FILE *f_ = nullptr;
+
+    void *filedata_ = nullptr;
+    off_t dataofs_ = 0;
+    size_t datalen_ = 0;
+    size_t maxlen_ = 256 * 1024 * 1024;
 
     static const uint8_t writeFlag = 0b01;
     static const uint8_t retryOpenFlag = 0b10;
