@@ -30,6 +30,10 @@
 #include "pos_constants.hpp"
 #include "util.hpp"
 
+extern "C" {
+#include "hugetlbfs.h"
+}
+
 // ChaCha8 block size
 const uint16_t kF1BlockSizeBits = 512;
 
@@ -192,8 +196,8 @@ private:
 };
 
 struct rmap_item {
-    uint16_t count : 4;
-    uint16_t pos : 12;
+    uint32_t count;
+    uint32_t pos;
 };
 
 // Class to evaluate F2 .. F7.
@@ -206,14 +210,21 @@ public:
         this->k_ = k;
         this->table_index_ = table_index;
 
-        this->rmap.resize(kBC);
+        // this->rmap.resize(kBC);
+
+        this->rmap = (struct rmap_item *)get_huge_pages(2048 * 1024, GHP_DEFAULT);
+        this->rmap_clean = (uint16_t *)get_huge_pages(2048 * 1024, GHP_DEFAULT);
+
         if (!initialized) {
             initialized = true;
             load_tables();
         }
     }
 
-    inline ~FxCalculator() = default;
+    inline ~FxCalculator() {
+        free_huge_pages(this->rmap);
+        free_huge_pages(this->rmap_clean);
+    }
 
     // Disable copying
     FxCalculator(const FxCalculator&) = delete;
@@ -275,7 +286,7 @@ public:
     // bucket length, we can store all the R values and lookup each of our 32 candidates to see if
     // any R value matches. This function can be further optimized by removing the inner loop, and
     // being more careful with memory allocation.
-    inline int32_t FindMatches(
+    inline int32_t FindMatchesIdx(
         const std::vector<PlotEntry>& bucket_L,
         const std::vector<PlotEntry>& bucket_R,
         uint16_t *idx_L,
@@ -284,10 +295,56 @@ public:
         int32_t idx_count = 0;
         uint16_t parity = (bucket_L[0].y / kBC) % 2;
 
-        for (size_t yl : rmap_clean) {
-            this->rmap[yl].count = 0;
+        // for (size_t yl : rmap_clean) {
+        for (int i = 0; i < rmap_clean_index; ++i) {
+            this->rmap[rmap_clean[i]].count = 0;
         }
-        rmap_clean.clear();
+        // rmap_clean.clear();
+        rmap_clean_index = 0;
+
+        uint64_t remove = (bucket_R[0].y / kBC) * kBC;
+        for (size_t pos_R = 0; pos_R < bucket_R.size(); ++pos_R) {
+            uint64_t r_y = bucket_R[pos_R].y - remove;
+
+            if (!rmap[r_y].count) {
+                rmap[r_y].pos = pos_R + rmap[r_y].count;
+            }
+            ++rmap[r_y].count;
+            // rmap_clean.push_back(r_y);
+            rmap_clean[rmap_clean_index] = r_y;
+            ++rmap_clean_index;
+        }
+
+        uint64_t remove_y = remove - kBC;
+        for (size_t pos_L = 0; pos_L < bucket_L.size(); ++pos_L) {
+            uint64_t r = bucket_L[pos_L].y - remove_y;
+            for (uint8_t i = 0; i < kExtraBitsPow; ++i) {
+                uint16_t r_target = L_targets[parity][r][i];
+                for (size_t j = 0; j < rmap[r_target].count; ++j) {
+                    idx_L[idx_count]=pos_L;
+                    idx_R[idx_count]=rmap[r_target].pos;
+                    ++idx_count;
+                }
+            }
+        }
+        return idx_count;
+    }
+
+    inline int32_t FindMatchesCount(
+        const std::vector<PlotEntry>& bucket_L,
+        const std::vector<PlotEntry>& bucket_R,
+        uint16_t *idx_L,
+        uint16_t *idx_R)
+    {
+        int32_t idx_count = 0;
+        uint16_t parity = (bucket_L[0].y / kBC) % 2;
+
+        // for (size_t yl : rmap_clean) {
+        for (int i = 0; i < rmap_clean_index; i++) {
+            this->rmap[rmap_clean[i]].count = 0;
+        }
+        // rmap_clean.clear();
+        rmap_clean_index = 0;
 
         uint64_t remove = (bucket_R[0].y / kBC) * kBC;
         for (size_t pos_R = 0; pos_R < bucket_R.size(); pos_R++) {
@@ -297,7 +354,8 @@ public:
                 rmap[r_y].pos = pos_R;
             }
             rmap[r_y].count++;
-            rmap_clean.push_back(r_y);
+            // rmap_clean.push_back(r_y);
+            rmap_clean[rmap_clean_index++] = r_y;
         }
 
         uint64_t remove_y = remove - kBC;
@@ -305,14 +363,7 @@ public:
             uint64_t r = bucket_L[pos_L].y - remove_y;
             for (uint8_t i = 0; i < kExtraBitsPow; i++) {
                 uint16_t r_target = L_targets[parity][r][i];
-
-                for (size_t j = 0; j < rmap[r_target].count; j++) {
-                    if(idx_L != nullptr) {
-                        idx_L[idx_count]=pos_L;
-                        idx_R[idx_count]=rmap[r_target].pos + j;
-                    }
-                    idx_count++;
-                }
+                idx_count += rmap[r_target].count;
             }
         }
         return idx_count;
@@ -321,8 +372,11 @@ public:
 private:
     uint8_t k_{};
     uint8_t table_index_{};
-    std::vector<struct rmap_item> rmap;
-    std::vector<uint16_t> rmap_clean;
+    // std::vector<struct rmap_item> rmap;
+    // std::vector<uint16_t> rmap_clean;
+    struct rmap_item *rmap;
+    uint16_t *rmap_clean;
+    int rmap_clean_index = 0;
 };
 
 #endif  // SRC_CPP_CALCULATE_BUCKET_HPP_

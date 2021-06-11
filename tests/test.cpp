@@ -450,7 +450,7 @@ TEST_CASE("F functions")
             uint16_t idx_L[10000];
             uint16_t idx_R[10000];
 
-            int32_t idx_count = f2.FindMatches(left_bucket, right_bucket, idx_L, idx_R);
+            int32_t idx_count = f2.FindMatchesIdx(left_bucket, right_bucket, idx_L, idx_R);
             for(int32_t i=0; i < idx_count; i++) {
                 REQUIRE(CheckMatch(left_bucket[idx_L[i]].y, right_bucket[idx_R[i]].y));
             }

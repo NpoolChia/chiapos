@@ -31,12 +31,16 @@ using namespace std::chrono_literals; // for operator""min;
 
 #include "chia_filesystem.hpp"
 
+extern "C" {
+#include "hugetlbfs.h"
+}
+
 #include "./bits.hpp"
 #include "./util.hpp"
 #include "bitfield.hpp"
 
-constexpr uint64_t write_cache = 1024 * 1024;
-constexpr uint64_t read_ahead = 1024 * 1024;
+constexpr uint64_t write_cache = 1024 * 1024 * 8;
+constexpr uint64_t read_ahead = 1024 * 1024 * 8;
 
 struct Disk {
     virtual uint8_t const* Read(uint64_t begin, uint64_t length) = 0;
@@ -272,7 +276,8 @@ struct BufferedDisk : Disk
             && read_buffer_start_ + read_ahead >= begin + length + 7)
         {
             // if the read is entirely inside the buffer, just return it
-            return read_buffer_.get() + (begin - read_buffer_start_);
+            // return read_buffer_.get() + (begin - read_buffer_start_);
+            return read_buffer_ + (begin - read_buffer_start_);
         }
         else if (begin >= read_buffer_start_ || begin == 0 || read_buffer_start_ == std::uint64_t(-1)) {
 
@@ -286,9 +291,11 @@ struct BufferedDisk : Disk
             // greater than 0
             read_buffer_start_ = begin;
             uint64_t const amount_to_read = std::min(file_size_ - read_buffer_start_, read_ahead);
-            disk_->Read(begin, read_buffer_.get(), amount_to_read);
+            // disk_->Read(begin, read_buffer_.get(), amount_to_read);
+            disk_->Read(begin, read_buffer_, amount_to_read);
             read_buffer_size_ = amount_to_read;
-            return read_buffer_.get();
+            // return read_buffer_.get();
+            return read_buffer_;
         }
         else {
             // ideally this won't happen
@@ -316,7 +323,8 @@ struct BufferedDisk : Disk
         NeedWriteCache();
         if (begin == write_buffer_start_ + write_buffer_size_) {
             if (write_buffer_size_ + length <= write_cache) {
-                ::memcpy(write_buffer_.get() + write_buffer_size_, memcache, length);
+                // ::memcpy(write_buffer_.get() + write_buffer_size_, memcache, length);
+                ::memcpy(write_buffer_ + write_buffer_size_, memcache, length);
                 write_buffer_size_ += length;
                 return;
             }
@@ -325,7 +333,8 @@ struct BufferedDisk : Disk
 
         if (write_buffer_size_ == 0 && write_cache >= length) {
             write_buffer_start_ = begin;
-            ::memcpy(write_buffer_.get() + write_buffer_size_, memcache, length);
+            // ::memcpy(write_buffer_.get() + write_buffer_size_, memcache, length);
+            ::memcpy(write_buffer_ + write_buffer_size_, memcache, length);
             write_buffer_size_ = length;
             return;
         }
@@ -347,8 +356,16 @@ struct BufferedDisk : Disk
     {
         FlushCache();
 
-        read_buffer_.reset();
-        write_buffer_.reset();
+        if (read_buffer_) {
+            // read_buffer_.reset();
+            free_huge_pages(read_buffer_);
+            read_buffer_ = nullptr;
+        }
+        if (write_buffer_) {
+            // write_buffer_.reset();
+            free_huge_pages(write_buffer_);
+            write_buffer_ = nullptr;
+        }
         read_buffer_size_ = 0;
         write_buffer_size_ = 0;
     }
@@ -357,7 +374,8 @@ struct BufferedDisk : Disk
     {
         if (write_buffer_size_ == 0) return;
 
-        disk_->Write(write_buffer_start_, write_buffer_.get(), write_buffer_size_);
+        // disk_->Write(write_buffer_start_, write_buffer_.get(), write_buffer_size_);
+        disk_->Write(write_buffer_start_, write_buffer_, write_buffer_size_);
         write_buffer_size_ = 0;
     }
 
@@ -366,7 +384,8 @@ private:
     void NeedReadCache()
     {
         if (read_buffer_) return;
-        read_buffer_.reset(new uint8_t[read_ahead]);
+        read_buffer_ = (uint8_t *)get_huge_pages(read_ahead, GHP_DEFAULT);
+        // read_buffer_.reset(p);
         read_buffer_start_ = -1;
         read_buffer_size_ = 0;
     }
@@ -374,7 +393,8 @@ private:
     void NeedWriteCache()
     {
         if (write_buffer_) return;
-        write_buffer_.reset(new uint8_t[write_cache]);
+        write_buffer_ = (uint8_t *)get_huge_pages(write_cache, GHP_DEFAULT);
+        // write_buffer_.reset(p);
         write_buffer_start_ = -1;
         write_buffer_size_ = 0;
     }
@@ -385,14 +405,16 @@ private:
 
     // the file offset the read buffer was read from
     uint64_t read_buffer_start_ = -1;
-    std::unique_ptr<uint8_t[]> read_buffer_;
+    // std::unique_ptr<uint8_t[]> read_buffer_;
     uint64_t read_buffer_size_ = 0;
+    uint8_t *read_buffer_ = nullptr;
 
     // the file offset the write buffer should be written back to
     // the write buffer is *only* for contiguous and sequential writes
     uint64_t write_buffer_start_ = -1;
-    std::unique_ptr<uint8_t[]> write_buffer_;
+    // std::unique_ptr<uint8_t[]> write_buffer_;
     uint64_t write_buffer_size_ = 0;
+    uint8_t *write_buffer_ = nullptr;
 };
 
 struct FilteredDisk : Disk
