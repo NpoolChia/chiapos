@@ -321,8 +321,8 @@ public:
             for (uint8_t i = 0; i < kExtraBitsPow; ++i) {
                 uint16_t r_target = L_targets[parity][r][i];
                 for (size_t j = 0; j < rmap[r_target].count; ++j) {
-                    idx_L[idx_count]=pos_L;
-                    idx_R[idx_count]=rmap[r_target].pos;
+                    idx_L[idx_count] = pos_L;
+                    idx_R[idx_count] = rmap[r_target].pos;
                     ++idx_count;
                 }
             }
@@ -349,10 +349,6 @@ public:
         uint64_t remove = (bucket_R[0].y / kBC) * kBC;
         for (size_t pos_R = 0; pos_R < bucket_R.size(); pos_R++) {
             uint64_t r_y = bucket_R[pos_R].y - remove;
-
-            if (!rmap[r_y].count) {
-                rmap[r_y].pos = pos_R;
-            }
             rmap[r_y].count++;
             // rmap_clean.push_back(r_y);
             rmap_clean[rmap_clean_index++] = r_y;
